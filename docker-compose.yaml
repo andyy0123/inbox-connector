@@ -1,85 +1,38 @@
 version: '3.8'
-
 services:
   api:
     build: .
     ports:
       - "8000:8000"
     environment:
-      - MONGODB_URL=mongodb://mongo1:27017,mongo2:27018,mongo3:27019/m365_connector?replicaSet=rs0
+      - MONGODB_URL=mongodb://admin:password@mongo:27017/m365_connector?authSource=admin
     depends_on:
-      - mongo1
-      - mongo2
-      - mongo3
+      - mongo
     volumes:
-      - ./main.py:/app/main.py
+      - .:/app
+      - /app/.venv
     networks:
-      - inbox_connector-network
+      - m365-network
+    tty: true
+    stdin_open: true
 
-  # MongoDB Replica Set - Primary
-  mongo1:
+  mongo:
     image: mongo:7.0
-    hostname: mongo1
+    hostname: mongo
     ports:
       - "27017:27017"
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=password
-    command: mongod --replSet rs0 --bind_ip_all
     volumes:
-      - mongo1_data:/data/db
+      - mongo_data:/data/db
       - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     networks:
-      - inbox_connector-network
-
-  # MongoDB Replica Set - Secondary 1
-  mongo2:
-    image: mongo:7.0
-    hostname: mongo2
-    ports:
-      - "27018:27017"
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=password
-    command: mongod --replSet rs0 --bind_ip_all
-    volumes:
-      - mongo2_data:/data/db
-    networks:
-      - inbox_connector-network
-
-  # MongoDB Replica Set - Secondary 2
-  mongo3:
-    image: mongo:7.0
-    hostname: mongo3
-    ports:
-      - "27019:27017"
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=password
-    command: mongod --replSet rs0 --bind_ip_all
-    volumes:
-      - mongo3_data:/data/db
-    networks:
-      - inbox_connector-network
-
-  # MongoDB Replica Set 初始化
-  mongo-setup:
-    image: mongo:7.0
-    depends_on:
-      - mongo1
-      - mongo2
-      - mongo3
-    volumes:
-      - ./replica-set-init.sh:/scripts/replica-set-init.sh
-    entrypoint: [ "bash", "/scripts/replica-set-init.sh" ]
-    networks:
-      - inbox_connector-network
+      - m365-network
 
 volumes:
-  mongo1_data:
-  mongo2_data:
-  mongo3_data:
+  mongo_data:
 
 networks:
-  inbox_connector-network:
+  m365-network:
     driver: bridge
