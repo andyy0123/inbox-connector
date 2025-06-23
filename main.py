@@ -14,7 +14,8 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow(),
-        "service": "M365 Inbox Connector"
+        "service": "M365 Inbox Connector",
+        "version": "1.0.0"
     }
 
 if __name__ == "__main__":
