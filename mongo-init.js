@@ -1,14 +1,23 @@
-use('m365_connector');
+db = db.getSiblingDB('admin');
 
-db.createUser({
-  user: 'app_user',
-  pwd: 'app_password',
-  roles: [
-    {
-      role: 'readWrite',
-      db: 'm365_connector'
-    }
-  ]
-});
+db.auth('admin', 'password');
 
-print('MongoDB initialization complete!');
+db = db.getSiblingDB('inbox_connector_db');
+
+try {
+    db.createUser({
+        user: 'app_user',
+        pwd: 'app_password',
+        roles: [
+            {
+                role: 'readWrite',
+                db: 'inbox_connector_db'
+            }
+        ]
+    });
+    print('Application user created successfully');
+} catch (e) {
+    print('User might already exist: ' + e);
+}
+
+print('MongoDB initialization completed');

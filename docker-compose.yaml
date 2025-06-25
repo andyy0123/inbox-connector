@@ -5,9 +5,10 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - MONGODB_URL=mongodb://admin:password@mongo:27017/m365_connector?authSource=admin
+      - MONGODB_URL=mongodb://admin:password@mongo:27017/inbox_connector_db?authSource=admin
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     volumes:
       - .:/app
       - /app/.venv
@@ -15,12 +16,13 @@ services:
       - m365-network
     tty: true
     stdin_open: true
+    restart: unless-stopped
 
   mongo:
     image: mongo:7.0
     hostname: mongo
     ports:
-      - "27017:27017"
+      - "27020:27017"
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
       - MONGO_INITDB_ROOT_PASSWORD=password
@@ -29,6 +31,13 @@ services:
       - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     networks:
       - m365-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
 
 volumes:
   mongo_data:
