@@ -61,10 +61,7 @@ def setup_test_data():
 
 
 app = FastAPI(
-    title="M365 Inbox Connector",
-    description="M365 Inbox Connector",
-    version="1.0.0",
-    lifespan=lifespan
+    title="M365 Inbox Connector", description="M365 Inbox Connector", version="1.0.0"
 )
 
 
@@ -75,17 +72,37 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.utcnow(),
         "service": "M365 Inbox Connector",
-        "version": "1.0.0"
+        "version": "1.0.0",
     }
 
 
-@app.get("/tenant/{tenant_id}")
-async def getTenant(tenant_id: str):
-    """Get tenant information"""
-    tenant_info = data_service.read(tenant_id, "tenant_config")
-    if not tenant_info:
-        return {"error": "Tenant not found"}, 404
-    return tenant_info
+@app.get("/init_tenant")
+async def init_tenant():
+    """Init tenant 給 appId appSecret tenantId -> createTenant({appId, appSecret, tenantId, userList..}) ->
+    getMail, getAtt -> response mongoTenantId"""
+    return {"tenantMongoId": "Tenant initialized successfully"}
+
+
+@app.get("/list_latest_mail")
+async def list_latest_mail():
+    """input: tenantMongoId, by tenant/user, output: latestMailList"""
+    return {
+        "latestMailList": [{"messageId": 1, "userId": 1, "attachments": []}],
+        "status": "success",
+    }
+
+
+@app.get("/delete_mail")
+async def delete_mail():
+    """input: tenantMongoId, userId, messageId, output: delete: 1/0, 更新 mail"""
+    return {"delete": 1}
+
+
+@app.get("/delete_attachment")
+async def delete_attachment():
+    """input: tenantMongoId, userId, attachmentId, output: delete: 1/0, 更新 mail"""
+    return {"delete": 1}
+
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
