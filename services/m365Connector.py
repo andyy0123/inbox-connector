@@ -14,13 +14,6 @@ from kiota_abstractions.base_request_configuration import RequestConfiguration
 # from pprint import pp
 
 
-def get_graph_client(client_id: str, client_secret: str, tenant_id: str):
-    credential = ClientSecretCredential(
-        tenant_id=tenant_id, client_id=client_id, client_secret=client_secret
-    )
-    return GraphServiceClient(credential, ["https://graph.microsoft.com/.default"])
-
-
 async def getTenantUserList(client: GraphServiceClient):
     try:
         res = await client.users.get()
