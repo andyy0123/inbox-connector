@@ -7,7 +7,7 @@ from msgraph import GraphServiceClient
 from msgraph.generated.models.o_data_errors.o_data_error import ODataError
 
 from services.logService import setup_logger
-from services.m365Connector import getTenantUserList, getTenantMails
+from services.m365Connector import getTenantUserList, getTenantAllMails
 
 
 logger = setup_logger(__name__)
@@ -81,7 +81,7 @@ async def auth_init_tenant(tenant_id: str, client_id: str, client_secret: str) -
         logger.info(f"Starting to fetch user and mail data in parallel for tenant {tenant_id}...")
         tasks = [
             getTenantUserList(client),
-            getTenantMails(client)
+            getTenantAllMails(client)
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         users, mail_results = results
