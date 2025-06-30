@@ -1,3 +1,31 @@
+"""
+Usage:
+    from services.dataService import DataService
+    data_service = DataService().get_data_service()
+
+    # Example usage
+    dataService.create("123", "message", {"message": "Hello, World!"})
+
+    dataService.read(
+        "123", "message", {"_id": ObjectId("6862052ac17526c879cc0fce")}
+    )
+
+    dataService.update_one(
+        "123",
+        "message",
+        {"_id": ObjectId("6862052ac17526c879cc0fce")},
+        {"message": "Goodbye, World"},
+    )
+
+    dataService.delete_one(
+        "123",
+        "message",
+        {"_id": ObjectId("686204ffd8578e617a242970")},
+    )
+
+    data_service.close()
+"""
+
 import os
 import hashlib
 from typing import Optional, List, Dict, Any
@@ -15,7 +43,7 @@ logger = OperationLogger()
 MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://admin:password@localhost:27017")
 
 
-class DataService:
+class MongoDataService:
     def __init__(self):
         """initialize"""
         self.connection_string = MONGODB_URL
@@ -66,7 +94,7 @@ class DataService:
             raise ConnectionFailure("MongoDB not connected")
 
         hashed_tenant_id = self._hash_tenant_id(tenant_id)
-        db_name = f"{self.database_prefix}_{hashed_tenant_id}"
+        db_name = f"tenant_{hashed_tenant_id}"
 
         logger.log(
             LogLevel.INFO, "MongoDB", f"connected successfully to database: {db_name}"
@@ -261,3 +289,27 @@ class DataService:
         if self.client:
             self.client.close()
             logger.log(LogLevel.INFO, "MongoDB", "closed connection")
+
+
+class DataService:
+    """DataService Singleton Class"""
+
+    _instance = None
+    _data_service = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def get_data_service(self) -> MongoDataService:
+        """get data service instance"""
+        if self._data_service is None:
+            self._data_service = MongoDataService()
+        return self._data_service
+
+    def close(self):
+        """close data service"""
+        if self._data_service:
+            self._data_service.close()
+            self._data_service = None
