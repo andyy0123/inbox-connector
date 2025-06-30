@@ -1,4 +1,5 @@
 from enum import IntEnum, unique
+import os
 
 @unique
 class OperationCode(IntEnum):
@@ -11,4 +12,5 @@ class OperationCode(IntEnum):
 class LogLevel(IntEnum):
     INFO = 1
     ERROR = 2
-    
+
+CIPHER_KEY = os.environ['AES_SECRET_KEY'].encode('utf-8')
