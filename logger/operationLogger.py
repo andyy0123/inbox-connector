@@ -1,5 +1,6 @@
 from logger.basicLogger import BasicLogger
 
+
 class OperationLogger:
     def __init__(self, log_file='operation.log'):
         self.BasicLogger = BasicLogger(log_file = log_file)
