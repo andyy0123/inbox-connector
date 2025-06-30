@@ -1,10 +1,20 @@
 import uvicorn
 from fastapi import FastAPI, HTTPException, Body
 from datetime import datetime
+from contextlib import asynccontextmanager
 from pydantic import BaseModel, Field
 from fastapi.responses import JSONResponse
+
+from services.dataService import DataService
 from services.logService import setup_logger
-from services.authService import auth_init_tenant, TenantInitializationError, GraphAPIError, AlreadyInitializedError
+from services.authService import (
+    auth_init_tenant,
+    TenantInitializationError,
+    GraphAPIError,
+    AlreadyInitializedError,
+)
+
+data_service = None
 
 app = FastAPI(
     title="M365 Inbox Connector", description="M365 Inbox Connector", version="1.0.0"
@@ -12,11 +22,31 @@ app = FastAPI(
 
 logger = setup_logger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """application lifecycle"""
+    global data_service
+
+    print("Initializing data service...")
+
+    data_service = DataService().get_data_service()
+
+    print("Application startup complete")
+
+    yield
+
+    print("Application is shutting down...")
+
+
 # --- Pydantic Model Definitions ---
 class TenantCredentials(BaseModel):
     tenant_id: str = Field(..., description="The unique identifier for the tenant.")
     client_id: str = Field(..., description="The client ID (appId) for authentication.")
-    client_secret: str = Field(..., description="The client secret (appSecret) for authentication.")
+    client_secret: str = Field(
+        ..., description="The client secret (appSecret) for authentication."
+    )
+
 
 class TenantResponse(BaseModel):
     message: str
@@ -28,7 +58,7 @@ async def health_check():
     """health check"""
     return {
         "status": "healthy",
-        "timestamp": datetime.utcnow(),
+        "timestamp": datetime.datetime.now(),
         "service": "M365 Inbox Connector",
         "version": "1.0.0",
     }
@@ -38,7 +68,7 @@ async def health_check():
 @app.exception_handler(TenantInitializationError)
 async def tenant_init_exception_handler(request, exc: TenantInitializationError):
     return JSONResponse(
-        status_code=400, # Bad Request, as it might be an issue with the provided data
+        status_code=400,  # Bad Request, as it might be an issue with the provided data
         content={"message": f"Tenant initialization failed: {exc}"},
     )
 
@@ -46,8 +76,10 @@ async def tenant_init_exception_handler(request, exc: TenantInitializationError)
 @app.exception_handler(GraphAPIError)
 async def graph_api_exception_handler(request, exc: GraphAPIError):
     return JSONResponse(
-        status_code=503, # Service Unavailable, indicating an external service issue
-        content={"message": f"An error occurred while communicating with Microsoft Graph API: {exc}"},
+        status_code=503,  # Service Unavailable, indicating an external service issue
+        content={
+            "message": f"An error occurred while communicating with Microsoft Graph API: {exc}"
+        },
     )
 
 
@@ -57,17 +89,13 @@ async def graph_api_exception_handler(request, exc: GraphAPIError):
     tags=["Tenants"],
     summary="Initialize a new tenant",
 )
-async def init_tenant(
-    credentials: TenantCredentials = Body(...)
-):
+async def init_tenant(credentials: TenantCredentials = Body(...)):
     try:
         logger.info(f"Received request to initialize tenant: {credentials.tenant_id}")
 
         # Execute initialization logic
         await auth_init_tenant(
-            credentials.tenant_id,
-            credentials.client_id,
-            credentials.client_secret
+            credentials.tenant_id, credentials.client_id, credentials.client_secret
         )
 
         return {
@@ -77,16 +105,17 @@ async def init_tenant(
 
     except AlreadyInitializedError as e:
         raise HTTPException(
-            status_code=409,
-            detail="Tenant has already been initialized."
+            status_code=409, detail="Tenant has already been initialized."
         )
 
     # Maintain a generic server error handler without exposing internal details
     except Exception as e:
-        logger.error(f"An unexpected error occurred while initializing tenant '{credentials.tenant_id}': {e}", exc_info=True)
+        logger.error(
+            f"An unexpected error occurred while initializing tenant '{credentials.tenant_id}': {e}",
+            exc_info=True,
+        )
         raise HTTPException(
-            status_code=500,
-            detail="An unexpected internal server error occurred."
+            status_code=500, detail="An unexpected internal server error occurred."
         )
 
 
