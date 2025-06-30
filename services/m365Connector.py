@@ -76,6 +76,7 @@ async def getTenantMailChangeSet(
                     ),
                 }
             )
+        return changes
     except APIError as e:
         print(f"Error occured when calling getTenantMails: {e.message}")
     except ClientAuthenticationError as e:
