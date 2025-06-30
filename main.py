@@ -1,6 +1,28 @@
 from fastapi import FastAPI
 import uvicorn
 from datetime import datetime
+from contextlib import asynccontextmanager
+
+from services.dataService import DataService
+
+data_service = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """application lifecycle"""
+    global data_service
+
+    print("Initializing data service...")
+
+    data_service = DataService().get_data_service()
+
+    print("Application startup complete")
+
+    yield
+
+    print("Application is shutting down...")
+
 
 app = FastAPI(
     title="M365 Inbox Connector", description="M365 Inbox Connector", version="1.0.0"
@@ -12,7 +34,7 @@ async def health_check():
     """health check"""
     return {
         "status": "healthy",
-        "timestamp": datetime.utcnow(),
+        "timestamp": datetime.datetime.now(),
         "service": "M365 Inbox Connector",
         "version": "1.0.0",
     }
