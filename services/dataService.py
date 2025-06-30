@@ -67,19 +67,6 @@ class MongoDataService:
             logger.log(LogLevel.ERROR, "MongoDB", f"connection failed: {e}")
             raise
 
-    def _hash_tenant_id(self, tenant_id: str) -> str:
-        """
-        hash tenant ID
-
-        Args:
-            tenant_id: tenant ID
-
-        Returns:
-            str: hashed tenant ID
-        """
-        hash_object = hashlib.sha256(tenant_id.encode())
-        return hash_object.hexdigest()[:16]
-
     def _get_tenant_database(self, tenant_id: str) -> Database:
         """
         get tenant-specific database
@@ -93,8 +80,7 @@ class MongoDataService:
         if not self.client:
             raise ConnectionFailure("MongoDB not connected")
 
-        hashed_tenant_id = self._hash_tenant_id(tenant_id)
-        db_name = f"tenant_{hashed_tenant_id}"
+        db_name = f"tenant_{tenant_id}"
 
         logger.log(
             LogLevel.INFO, "MongoDB", f"connected successfully to database: {db_name}"
