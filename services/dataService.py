@@ -27,7 +27,6 @@ Usage:
 """
 
 import os
-import hashlib
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 
@@ -136,6 +135,49 @@ class MongoDataService:
                 LogLevel.ERROR,
                 "MongoDB",
                 "create document failed",
+                tenant_id=tenant_id,
+                collection_type=collection_type,
+                error=str(e),
+            )
+            raise
+
+    def create_many(
+        self, tenant_id: str, collection_type: str, documents: List[Dict[str, Any]]
+    ) -> List[str]:
+        """
+        create multiple documents
+
+        Args:
+            tenant_id: tenant ID
+            collection_type: collection type
+            documents: list of documents to create
+
+        Returns:
+            List[Dict[str, Any]]: list of inserted document
+        """
+        try:
+            collection = self._get_collection(tenant_id, collection_type)
+
+            current_time = datetime.now(timezone.utc)
+            for document in documents:
+                document["created_at"] = current_time
+                document["updated_at"] = current_time
+
+            result = collection.insert_many(documents)
+            logger.log(
+                LogLevel.INFO,
+                "MongoDB",
+                f"created {len(result.inserted_ids)} documents successfully",
+                tenant_id=tenant_id,
+                collection_type=collection_type,
+            )
+            return result
+
+        except PyMongoError as e:
+            logger.log(
+                LogLevel.ERROR,
+                "MongoDB",
+                "create multiple documents failed",
                 tenant_id=tenant_id,
                 collection_type=collection_type,
                 error=str(e),
