@@ -4,7 +4,15 @@ Usage:
     data_service = DataService().get_data_service()
 
     # Example usage
+    dataService.is_database_exists("123")
+
     dataService.create("123", "message", {"message": "Hello, World!"})
+
+    dataService.create_many(
+        "123",
+        "message",
+        [{"message": "Hello, World!"}, {"message": "Hello, World22222!"}],
+    )
 
     dataService.read(
         "123", "message", {"_id": ObjectId("6862052ac17526c879cc0fce")}
@@ -99,6 +107,22 @@ class MongoDataService:
         """
         db = self._get_tenant_database(tenant_id)
         return db[collection_type]
+
+    def is_database_exists(self, tenant_id: str) -> bool:
+        """
+        Check if a tenant-specific database exists.
+
+        Args:
+            tenant_id: tenant ID
+
+        Returns:
+            bool: True if the database exists, False otherwise
+        """
+        if not self.client:
+            raise ConnectionFailure("MongoDB not connected")
+
+        db_name = f"tenant_{tenant_id}"
+        return db_name in self.client.list_database_names()
 
     def create(
         self, tenant_id: str, collection_type: str, document: Dict[str, Any]
