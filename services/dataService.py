@@ -6,7 +6,7 @@ Usage:
     # Example usage
     dataService.is_database_exists("123")
 
-    dataService.create("123", "message", {"message": "Hello, World!"})
+    dataService.create_one("123", "message", {"message": "Hello, World!"})
 
     dataService.create_many(
         "123",
@@ -124,11 +124,11 @@ class MongoDataService:
         db_name = f"tenant_{tenant_id}"
         return db_name in self.client.list_database_names()
 
-    def create(
+    def create_one(
         self, tenant_id: str, collection_type: str, document: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        create document
+        create a document
 
         Args:
             tenant_id: tenant ID
