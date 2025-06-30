@@ -1,6 +1,5 @@
 # import asyncio
 from typing import Optional
-from azure.identity import ClientSecretCredential
 from azure.core.exceptions import ClientAuthenticationError
 from msgraph import GraphServiceClient
 from msgraph.generated.users.item.mail_folders.item.messages.item.message_item_request_builder import (
@@ -11,7 +10,6 @@ from msgraph.generated.users.item.mail_folders.item.messages.delta.delta_request
 )
 from kiota_abstractions.api_error import APIError
 from kiota_abstractions.base_request_configuration import RequestConfiguration
-# from pprint import pp
 
 
 async def getTenantUserList(client: GraphServiceClient):
@@ -76,6 +74,7 @@ async def getTenantMailChangeSet(
                     ),
                 }
             )
+        return changes
     except APIError as e:
         print(f"Error occured when calling getTenantMails: {e.message}")
     except ClientAuthenticationError as e:
