@@ -9,9 +9,12 @@ from services.dataService import DataService
 from services.logService import setup_logger
 from services.authService import (
     auth_init_tenant,
+    auth_update_tenant,
     TenantInitializationError,
+    TenantUpdateError,
     GraphAPIError,
     AlreadyInitializedError,
+    TenantNotFoundError,
 )
 
 data_service = None
@@ -52,6 +55,11 @@ class TenantResponse(BaseModel):
     message: str
     tenant_id: str
 
+class TenantUpdateResponse(BaseModel):
+    message: str
+    tenant_id: str
+    updated_at: datetime
+
 
 @app.get("/health")
 async def health_check():
@@ -65,18 +73,37 @@ async def health_check():
 
 
 # --- Custom Exception Handlers ---
+@app.exception_handler(TenantNotFoundError)
+async def tenant_not_found_exception_handler(request, exc: TenantNotFoundError):
+    return JSONResponse(
+        status_code=404,
+        content={"message": str(exc)},
+    )
+
+@app.exception_handler(AlreadyInitializedError)
+async def tenant_already_initialized_exception_handler(request, exc: AlreadyInitializedError):
+    return JSONResponse(
+        status_code=409,
+        content={"message": str(exc)},
+    )
 @app.exception_handler(TenantInitializationError)
 async def tenant_init_exception_handler(request, exc: TenantInitializationError):
     return JSONResponse(
-        status_code=400,  # Bad Request, as it might be an issue with the provided data
+        status_code=400,
         content={"message": f"Tenant initialization failed: {exc}"},
     )
 
+@app.exception_handler(TenantUpdateError)
+async def tenant_update_exception_handler(request, exc: TenantUpdateError):
+    return JSONResponse(
+        status_code=400,
+        content={"message": f"Tenant update failed: {exc}"},
+    )
 
 @app.exception_handler(GraphAPIError)
 async def graph_api_exception_handler(request, exc: GraphAPIError):
     return JSONResponse(
-        status_code=503,  # Service Unavailable, indicating an external service issue
+        status_code=503,
         content={
             "message": f"An error occurred while communicating with Microsoft Graph API: {exc}"
         },
@@ -84,12 +111,20 @@ async def graph_api_exception_handler(request, exc: GraphAPIError):
 
 
 @app.post(
-    "/init_tenant",
+    "/tenant/init",
     response_model=TenantResponse,
     tags=["Tenants"],
     summary="Initialize a new tenant",
+    description="Initializes a new tenant by validating credentials against the Graph API, fetching user and mail data, and storing the configuration.",
+    status_code=201, # 201 Created is more appropriate for successful resource creation.
 )
 async def init_tenant(credentials: TenantCredentials = Body(...)):
+    """
+    Initializes a new tenant.
+    - Validates credentials with Microsoft Graph.
+    - Fetches initial data.
+    - Raises 409 Conflict if the tenant is already initialized.
+    """
     try:
         logger.info(f"Received request to initialize tenant: {credentials.tenant_id}")
 
@@ -117,6 +152,34 @@ async def init_tenant(credentials: TenantCredentials = Body(...)):
         raise HTTPException(
             status_code=500, detail="An unexpected internal server error occurred."
         )
+
+
+@app.post(
+    "/tenant/update",
+    response_model=TenantUpdateResponse,
+    tags=["Tenants"],
+    summary="Update an existing tenant's credentials",
+    description="Updates the client_id and client_secret for an existing tenant after validating the new credentials.",
+)
+async def update_tenant_api(credentials: TenantCredentials = Body(...)):
+    """
+    Updates an existing tenant's credentials.
+    - Raises 404 Not Found if the tenant does not exist.
+    - Validates the new credentials before saving them.
+    """
+    try:
+        logger.info(f"Received request to update tenant: {credentials.tenant_id}")
+        updated_timestamp = await auth_update_tenant(
+            credentials.tenant_id, credentials.client_id, credentials.client_secret
+        )
+        return {
+            "message": "Tenant credentials have been updated successfully",
+            "tenant_id": credentials.tenant_id,
+            "updated_at": updated_timestamp,
+        }
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while updating tenant '{credentials.tenant_id}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected internal server error occurred.")
 
 
 @app.get("/list_latest_mail")
