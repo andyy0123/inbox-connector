@@ -26,7 +26,7 @@ class SuccessResponse(BaseModel):
 import services.m365Connector as m365API
 from services.tenantService import TenantService
 
-async def get_graph_clinet(tenant_id):
+async def get_graph_client(tenant_id):
     tenant_service = TenantService(tenant_id)
     client_ID = tenant_service.getTenantAppId()
     client_secret = tenant_service.getTenantAppSecret()
@@ -34,12 +34,12 @@ async def get_graph_clinet(tenant_id):
     return graph_clinet
 
 async def get_user_list_API(tenant_id):
-    graph_client = await get_graph_clinet(tenant_id)
+    graph_client = await get_graph_client(tenant_id)
     userList = await m365API.getTenantUserList(graph_client)
     return userList
 
 async def get_user_mails_API(tenant_id, user_id):
-    graph_client = await get_graph_clinet(tenant_id)
+    graph_client = await get_graph_client(tenant_id)
     mails = await m365API.getUserMails(graph_client, user_id)
     return mails
 
