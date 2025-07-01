@@ -49,8 +49,6 @@ async def get_all_users(tenant_id):
 
 async def get_specific_user(tenant_id, user_id):
     user_list = await get_user_list_API(tenant_id)
-    # tenant_service = TenantService(tenant_id)
-    # user = tenant_service.getTenantUser(user_id)
     for user in user_list:
         if user.get('id') == user_id:
             return user
