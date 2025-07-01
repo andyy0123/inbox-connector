@@ -2,9 +2,6 @@
 from typing import Optional
 from azure.core.exceptions import ClientAuthenticationError
 from msgraph import GraphServiceClient
-from msgraph.generated.users.item.mail_folders.item.messages.item.message_item_request_builder import (
-    MessageItemRequestBuilder,
-)
 from msgraph.generated.users.item.mail_folders.item.messages.delta.delta_request_builder import (
     DeltaRequestBuilder,
 )
