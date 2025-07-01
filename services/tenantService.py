@@ -1,83 +1,103 @@
 # Brownie
 from common.cipher import AESCipher
-from common.constants import CIPHER_KEY
-from common.constants import Collection
-from logger.errorLogger import ErrorLogger
-from services import dataService
+from common.constants import CIPHER_KEY, Collection, LogLevel
+from logger.operationLogger import OperationLogger
+from services.dataService import DataService
 
-def createTenant(appId, appSecret, tenantId, users, mails):
-    errorLog = ErrorLogger()
-    cipher = AESCipher(CIPHER_KEY)
+logger = OperationLogger()
+cipher = AESCipher(CIPHER_KEY)
+mongo_service = DataService.get_data_service()
 
-    try:
-        hashedAppId = cipher.encrypt(appId)
-        hashedAppSecret = cipher.encrypt(appSecret)
-        hashedTenant = cipher.encrypt(tenantId)
+class TenantService:
+    def __init__(self, tenant_id):
+        self.tenant_id = tenant_id
+        try:
+            self.__tenant_hash = cipher.encrypt(tenant_id)
+        except Exception as e:
+            logger.log(LogLevel.ERROR, "TenantService", f"encrypt failed: {e}")
+            raise
         
-        data = {
-        '_id': 'singleton',
-        'appId': hashedAppId,
-        'appSecret': hashedAppSecret
-        }
-        
-        userList = users
-        if isinstance(userList, dict):
-            userList = [userList]
+    def delete(self):
+        mongo_service.delete_database(self.__tenant_hash)
+
+    def getTenantHashed(self):
+        return self.__tenant_hash
+
+    def _create_info_data(self, cid, csecret):
+        try:
+            data = {
+                'cid': cipher.encrypt(cid),
+                'csecret': cipher.encrypt(csecret)
+            }
             
-        mailList = mails
-        if isinstance(mailList, dict):
-            mailList = [mailList]
+            return data
+        except Exception as e:
+            logger.log(LogLevel.ERROR, "TenantService", f"_create_info_data failed: {e}")
+            raise
 
-        dataService.createDB(tenantId, hashedTenant)
-        dataService.creatDocument(Collection.INFO, hashedTenant, data)
-        dataService.creatDocument(Collection.USER, hashedTenant, userList)
+
+    def createTenant(self, cid, csecret):
+        data = self._create_info_data(cid, csecret)
         
-        return hashedTenant
+        if data :
+            data['_id'] = 'singleton'
+            mongo_service.create_one(self.__tenant_hash, Collection.INFO, data)
+            return True
     
-    except Exception as e:
-        errorLog.log('createTenant failed', err=e)
-        return None   
+        return False   
 
-def updateTenant(appId, appSecret, tenantId):
+    def updateTenant(self, cid, csecret):
+        data = self._create_info_data(cid, csecret)
+        
+        if data :
+            mongo_service.update_one(self.__tenant_hash, Collection.INFO, {'_id' : 'singleton'}, {"$set": data})
+            return True
     
+        return False
+    
+    def checkTenantExist(self):
+        return mongo_service.is_database_exists(self.__tenant_hash)
+    
+    def _getTenantInfo(self):
+        """ return json object"""
+        doc = mongo_service.read(self.__tenant_hash, Collection.INFO,{"_id" : "singleton"})
+        return doc[0] if doc else None
 
-def _getTenantInfo(hashedTenant):
-    """ return json object"""
-    doc = dataService.getDocument('info', hashedTenant, _id='singleton')
-    return doc
+    def getTenantAppId(self):
+        """ return
+                1. app id string (already decrypted)
+                2. None, if not exist"""
+        info = self._getTenantInfo()
 
-def getTenantAppId(hashedTenant):
-    """ get access token from db
-        return
-            1. access token string (already decrypted)
+        if info and 'cid' in info:
+            try:
+                return cipher.decrypt(info['cid'])
+            except Exception as e:
+                logger.log(LogLevel.ERROR, "TenantService", f"decrypt app id failed: {e}")
+                raise
+
+        return None
+
+    def getTenantAppSecret(self):
+        """ return
+            1. app secret string (already decrypted)
             2. None, if not exist"""
-    info = _getTenantInfo(hashedTenant)
+        info = self._getTenantInfo()
 
-    if info and 'appId' in info:
-        cipher = AESCipher(CIPHER_KEY)
-        return cipher.decrypt(info['appId'])
+        if info and 'csecret' in info:
+            try:
+                return cipher.decrypt(info['csecret'])
+            except Exception as e:
+                logger.log(LogLevel.ERROR, "TenantService", f"decrypt app secret failed: {e}")
+                raise
 
-    return None
+        return None
 
-def getTenantAppSercret(hashedTenant):
-    """ get access token from db
-        return
-            1. access token string (already decrypted)
-            2. None, if not exist"""
-    info = _getTenantInfo(hashedTenant)
+    def getTenantUser(self, user_id=None):
+        query = {"user_id": user_id} if user_id else {}
+        return mongo_service.read(self.__tenant_hash, Collection.USER, query)
 
-    if info and 'appSercret' in info:
-        cipher = AESCipher(CIPHER_KEY)
-        return cipher.decrypt(info['appSercret'])
-
-    return None
-
-def getTenantUser(hashedTenant, userId):
-    doc = None
-
-    if userId:
-        doc = dataService.getDocument('users', hashedTenant, userId=userId)
-    else:
-        doc = dataService.getAllDocuments('users', hashedTenant)
-
-    return doc
+    def insertUserList(self, userList):
+        if not isinstance(userList, list):
+            raise ValueError("userList must be a list of dict")
+        mongo_service.create_many(self.__tenant_hash, Collection.USER, userList)
