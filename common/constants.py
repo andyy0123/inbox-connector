@@ -6,7 +6,7 @@ class LogLevel(IntEnum):
     INFO = 1
     ERROR = 2
 @unique
-class Collection(Enum):
+class Collection(str, Enum):
     INFO = 'info'
     USER = 'users'
     MAIL = 'mails'

@@ -1,5 +1,6 @@
 import keyring
 import base64
+from keyrings.alt.file import PlaintextKeyring
 from Crypto.Random import get_random_bytes
 from common.cipher import AESCipher, UUIDBase62Cipher
 from common.constants import Collection, LogLevel
@@ -7,7 +8,7 @@ from logger.operationLogger import OperationLogger
 from services.dataService import DataService
 
 KEY_LENGTH = 16
-KEY_NAME = "AES_KEY"
+KEY_NAME = "INOBX_CONNECTOR"
 
 logger = OperationLogger()
 dataService = DataService()
@@ -19,12 +20,14 @@ class TenantService:
         try:
             self.__tenant_hash = UUIDBase62Cipher.encode(tenant_id)
             self.__aes_cipher = AESCipher(self._get_aes_key())
+            logger.log(LogLevel.INFO, "TenantService", f"init success")
         except Exception as e:
             logger.log(LogLevel.ERROR, "TenantService", f"init failed: {e}")
             raise
 
     def _get_aes_key(self):
         try:
+            keyring.set_keyring(PlaintextKeyring())
             key_b64 = keyring.get_password(self.__tenant_hash, KEY_NAME)
             if key_b64 is None:
                 key_bytes = get_random_bytes(KEY_LENGTH)
@@ -38,6 +41,7 @@ class TenantService:
             raise
         
     def delete(self):
+        logger.log(LogLevel.INFO, "TenantService", f"delete database", name=self.__tenant_hash)
         mongo_service.delete_database(self.__tenant_hash)
 
     def getTenantHashed(self):
@@ -61,6 +65,7 @@ class TenantService:
         if data :
             data['_id'] = 'singleton'
             mongo_service.create_one(self.__tenant_hash, Collection.INFO, data)
+            logger.log(LogLevel.INFO, "TenantService", f"create success", name=self.__tenant_hash)
             return True
     
         return False   
@@ -70,6 +75,7 @@ class TenantService:
         
         if data :
             mongo_service.update_one(self.__tenant_hash, Collection.INFO, {'_id' : 'singleton'}, {"$set": data})
+            logger.log(LogLevel.INFO, "TenantService", f"update success", name=self.__tenant_hash)
             return True
     
         return False
@@ -113,10 +119,51 @@ class TenantService:
         return None
 
     def getTenantUser(self, user_id=None):
+        """ if user_id in None return all users """
         query = {"user_id": user_id} if user_id else {}
         return mongo_service.read(self.__tenant_hash, Collection.USER, query)
+
+    def getTenantUseDeltaLink(self, user_id):
+        if not user_id:
+            raise ValueError("user_id error")
+
+        doc = self.getTenantUser(user_id)
+        if doc and "delta_link" in doc[0]:
+            return doc["delta_link"]
+
+        return ""
+
+    def updateTenantUser(self, user_id, **kwargs):
+        """ example: tenantService.updateTenantUser("abc@d.com", delta_link="www") """
+        if not user_id:
+            raise ValueError("user_id error")
+
+        if not kwargs:
+            raise ValueError("please provide one field at least")
+
+        data = {'$set': kwargs}
+        mongo_service.update_one(self.__tenant_hash, Collection.USER, {"user_id": user_id}, data)
+        logger.log(LogLevel.INFO, "TenantService", f"update user success", user_id=user_id, update_fields=list(kwargs.keys()))
+
+    def updateTenantUserDeltaLink(self, user_id, delta_link):
+        if not user_id:
+            raise ValueError("user_id error")
+
+        if delta_link is None:
+            raise ValueError("delta_link is None")
+
+        self.updateTenantUser(user_id, delta_link=delta_link)
+
+    def deleteTenantUser(self, user_id):
+        if not user_id:
+            raise ValueError("user_id error")
+
+        mongo_service.delete_one(self.__tenant_hash, Collection.USER, {"user_id": user_id})
+        logger.log(LogLevel.INFO, "TenantService", f"delete user success", user_id=user_id)
 
     def insertUserList(self, userList):
         if not isinstance(userList, list):
             raise ValueError("userList must be a list of dict")
+
         mongo_service.create_many(self.__tenant_hash, Collection.USER, userList)
+        logger.log(LogLevel.INFO, "TenantService", f"insert user list success", name=self.__tenant_hash)

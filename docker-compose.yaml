@@ -12,6 +12,7 @@ services:
     volumes:
       - .:/app
       - /app/.venv
+      - ./docker_keyring:/root/.local/share/python_keyring
     networks:
       - m365-network
     tty: true
