@@ -1,7 +1,7 @@
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
-from Crypto.Random import get_random_bytes
 import base64
+import uuid
 
 # for mac 
 # python3 -m venv venv
@@ -17,12 +17,45 @@ class AESCipher:
         raw_bytes = raw.encode('utf-8')
         cipher = AES.new(self.key, AES.MODE_CBC)
         ct_bytes = cipher.encrypt(pad(raw_bytes, AES.block_size))
-        return base64.b64encode(cipher.iv + ct_bytes).decode('utf-8')
+        encode =  base64.urlsafe_b64encode(cipher.iv + ct_bytes).decode('ascii')
+        
+        return encode.rstrip('=')
 
     def decrypt(self, enc: str) -> str:
-        enc_bytes = base64.b64decode(enc)
+        padding = '=' * (-len(enc) % 4)
+        enc_bytes = base64.urlsafe_b64decode(enc + padding)
         iv = enc_bytes[:16]
         ct = enc_bytes[16:]
         cipher = AES.new(self.key, AES.MODE_CBC, iv)
         raw_bytes = unpad(cipher.decrypt(ct), AES.block_size)
+
         return raw_bytes.decode('utf-8')
+
+class UUIDBase62Cipher:
+    BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    LENGTH = 22 # UUID 128 bit = 22 base62 digits
+
+    @classmethod
+    def int_to_base62(cls, n):
+        arr = []
+        for _ in range(cls.LENGTH):
+            n, r = divmod(n, 62)
+            arr.append(cls.BASE62[r])
+        return ''.join(reversed(arr))
+
+    @classmethod
+    def base62_to_int(cls, s):
+        n = 0
+        for c in s:
+            n = n * 62 + cls.BASE62.index(c)
+        return n
+
+    @classmethod
+    def encode(cls, uuid_str):
+        n = int(uuid.UUID(uuid_str))
+        return cls.int_to_base62(n)
+
+    @classmethod
+    def decode(cls, base62_str):
+        n = cls.base62_to_int(base62_str)
+        return str(uuid.UUID(int=n))
