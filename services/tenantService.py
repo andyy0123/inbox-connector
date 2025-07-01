@@ -1,20 +1,40 @@
-# Brownie
-from common.cipher import AESCipher
-from common.constants import CIPHER_KEY, Collection, LogLevel
+import keyring
+import base64
+from Crypto.Random import get_random_bytes
+from common.cipher import AESCipher, UUIDBase62Cipher
+from common.constants import Collection, LogLevel
 from logger.operationLogger import OperationLogger
 from services.dataService import DataService
 
+KEY_LENGTH = 16
+KEY_NAME = "AES_KEY"
+
 logger = OperationLogger()
-cipher = AESCipher(CIPHER_KEY)
-mongo_service = DataService.get_data_service()
+dataService = DataService()
+mongo_service = dataService.get_data_service()
 
 class TenantService:
     def __init__(self, tenant_id):
         self.tenant_id = tenant_id
         try:
-            self.__tenant_hash = cipher.encrypt(tenant_id)
+            self.__tenant_hash = UUIDBase62Cipher.encode(tenant_id)
+            self.__aes_cipher = AESCipher(self._get_aes_key())
         except Exception as e:
-            logger.log(LogLevel.ERROR, "TenantService", f"encrypt failed: {e}")
+            logger.log(LogLevel.ERROR, "TenantService", f"init failed: {e}")
+            raise
+
+    def _get_aes_key(self):
+        try:
+            key_b64 = keyring.get_password(self.__tenant_hash, KEY_NAME)
+            if key_b64 is None:
+                key_bytes = get_random_bytes(KEY_LENGTH)
+                key_b64 = base64.b64encode(key_bytes).decode('utf-8')
+                keyring.set_password(self.__tenant_hash, KEY_NAME, key_b64)
+            else:
+                key_bytes = base64.b64decode(key_b64)
+            return key_bytes
+        except Exception as e:
+            logger.log(LogLevel.ERROR, "TenantService", f"_get_aes_key failed: {e}")
             raise
         
     def delete(self):
@@ -26,15 +46,14 @@ class TenantService:
     def _create_info_data(self, cid, csecret):
         try:
             data = {
-                'cid': cipher.encrypt(cid),
-                'csecret': cipher.encrypt(csecret)
+                'cid': self.__aes_cipher.encrypt(cid),
+                'csecret': self.__aes_cipher.encrypt(csecret)
             }
             
             return data
         except Exception as e:
             logger.log(LogLevel.ERROR, "TenantService", f"_create_info_data failed: {e}")
             raise
-
 
     def createTenant(self, cid, csecret):
         data = self._create_info_data(cid, csecret)
@@ -71,7 +90,7 @@ class TenantService:
 
         if info and 'cid' in info:
             try:
-                return cipher.decrypt(info['cid'])
+                return self.__aes_cipher.decrypt(info['cid'])
             except Exception as e:
                 logger.log(LogLevel.ERROR, "TenantService", f"decrypt app id failed: {e}")
                 raise
@@ -86,7 +105,7 @@ class TenantService:
 
         if info and 'csecret' in info:
             try:
-                return cipher.decrypt(info['csecret'])
+                return self.__aes_cipher.decrypt(info['csecret'])
             except Exception as e:
                 logger.log(LogLevel.ERROR, "TenantService", f"decrypt app secret failed: {e}")
                 raise
