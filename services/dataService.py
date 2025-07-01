@@ -123,8 +123,7 @@ class MongoDataService:
         if not self.client:
             raise ConnectionFailure("MongoDB not connected")
 
-        db_name = f"tenant_{tenant_id}"
-        return db_name in self.client.list_database_names()
+        return tenant_id in self.client.list_database_names()
 
     def create_one(
         self, tenant_id: str, collection_type: str, document: Dict[str, Any]
