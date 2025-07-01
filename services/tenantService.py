@@ -1,5 +1,6 @@
 import keyring
 import base64
+from keyrings.alt.file import PlaintextKeyring
 from Crypto.Random import get_random_bytes
 from common.cipher import AESCipher, UUIDBase62Cipher
 from common.constants import Collection, LogLevel
@@ -7,7 +8,7 @@ from logger.operationLogger import OperationLogger
 from services.dataService import DataService
 
 KEY_LENGTH = 16
-KEY_NAME = "AES_KEY"
+KEY_NAME = "INOBX_CONNECTOR"
 
 logger = OperationLogger()
 dataService = DataService()
@@ -25,6 +26,7 @@ class TenantService:
 
     def _get_aes_key(self):
         try:
+            keyring.set_keyring(PlaintextKeyring())
             key_b64 = keyring.get_password(self.__tenant_hash, KEY_NAME)
             if key_b64 is None:
                 key_bytes = get_random_bytes(KEY_LENGTH)
