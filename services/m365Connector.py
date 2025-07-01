@@ -114,6 +114,7 @@ async def getEMLByMessageId(client: GraphServiceClient, user_id: str, message_id
 async def getUserMails(client: GraphServiceClient, user_id: str):
     try:
         mails = []
+        deltalink = ""
         user_message_requestor = (
             client.users.by_user_id(user_id)
             .mail_folders.by_mail_folder_id("inbox")
@@ -139,12 +140,13 @@ async def getUserMails(client: GraphServiceClient, user_id: str):
                     for message in res.value
                 ],
             )
-            if not res.odata_next_link:
+            if res.odata_delta_link:
+                deltalink = res.odata_delta_link
                 break
             res = await user_message_requestor.with_url(res.odata_next_link).get(
                 user_message_query
             )
-        return mails
+        return { "deltalink": deltalink, "mails": mails }
     except APIError as e:
         print(f"Error occured when calling getUserMails: {e.message}")
     except ClientAuthenticationError as e:
