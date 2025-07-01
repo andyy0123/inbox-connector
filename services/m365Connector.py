@@ -161,11 +161,12 @@ async def getTenantAllMails(client: GraphServiceClient):
         users_with_mails = []
 
         for user in users:
-            mails = await getUserMails(client, user["id"])
+            res = await getUserMails(client, user["id"])
             users_with_mails.append(
                 {
                     "user_id": user["id"],
-                    "mails": mails,
+                    "deltalink": res["deltalink"],
+                    "mails": res["mails"],
                 }
             )
         return users_with_mails
