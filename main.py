@@ -13,7 +13,7 @@ data_service = None
 app = FastAPI(
     title="Microsoft Graph Tenant API",
     description="An API to initialize, update, and manage tenant data from Microsoft Graph.",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 logger = setup_logger(__name__)
@@ -43,13 +43,16 @@ async def generic_exception_handler(request: Request, exc: Exception):
         content={"detail": f"An unexpected server error occurred: {exc}"},
     )
 
+
 # Include the router with all our endpoints
 app.include_router(tenant_router)
+
 
 @app.get("/", tags=["Health Check"])
 def read_root():
     """Root endpoint for health checks."""
     return {"status": "ok", "message": "Welcome to the Graph Tenant API"}
+
 
 if __name__ == "__main__":
     # test To run: uvicorn main:app --reload
