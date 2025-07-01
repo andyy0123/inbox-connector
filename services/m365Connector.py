@@ -47,13 +47,13 @@ async def getTenantMailChangeSet(
         )
         user_deltas_requestor: DeltaRequestBuilder = (
             (
-                await client.users.by_user_id(user_id)
+                client.users.by_user_id(user_id)
                 .mail_folders.by_mail_folder_id("inbox")
                 .messages.delta.with_url(deltalink)
             )
             if deltalink
             else (
-                await client.users.by_user_id(user_id)
+                client.users.by_user_id(user_id)
                 .mail_folders.by_mail_folder_id("inbox")
                 .messages.delta
             )
