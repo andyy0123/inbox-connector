@@ -8,6 +8,8 @@ from msgraph.generated.models.o_data_errors.o_data_error import ODataError
 
 from services.logService import setup_logger
 from services.m365Connector import getTenantUserList, getTenantAllMails
+# from services.mailService import getMail
+from services.tenantService import TenantService
 
 
 logger = setup_logger(__name__)
@@ -70,11 +72,11 @@ async def get_graph_client(tenant_id: str, client_id: str, client_secret: str) -
 # change start
 async def save_data_to_json(tenant_id, data: dict):
     """Saves data to a specified JSON file."""
-    filename = f"{tenant_id}_graph_data.json"
+    filename = f"{tenant_id}_data.json"
     logger.info(f"Saving data to {filename}...")
     try:
         with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+            json.dump(data, f, indent=2, ensure_ascii=False, default=str)
         logger.info(f"Data successfully saved to {filename}.")
         return filename
     except IOError as e:
@@ -100,16 +102,17 @@ async def auth_init_tenant(tenant_id: str, client_id: str, client_secret: str) -
     """
     Initializes a tenant, fetches data, and saves it.
     """
-    # change start
-    if check_tenant(tenant_id):
+    tenant_service = TenantService(tenant_id)
+
+    if tenant_service.checkTenantExist():
         logger.info(f"Data file already exists for tenant {tenant_id}. Skipping data fetch.")
         raise AlreadyInitializedError(f"Tenant {tenant_id} already initialized.")
-    # change end
 
     try:
         client = await get_graph_client(tenant_id, client_id, client_secret)
 
         logger.info(f"Fetching user and mail data for tenant {tenant_id}...")
+        tenant_service.createTenant(client_id, client_secret)
         tasks = [getTenantUserList(client), getTenantAllMails(client)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         users, mail_results = results
@@ -124,8 +127,9 @@ async def auth_init_tenant(tenant_id: str, client_id: str, client_secret: str) -
             logger.warning(f"No users found in tenant {tenant_id}.")
             raise TenantInitializationError("No users found, initialization aborted.")
 
-        logger.info(f"Successfully fetched {len(users)} users.")
+        tenant_service.insertUserList(users)
 
+        # change start
         final_data = {
             "tenant_id": tenant_id,
             "client_id": client_id,
@@ -133,11 +137,11 @@ async def auth_init_tenant(tenant_id: str, client_id: str, client_secret: str) -
             "users": users,
             "mails": mail_results
         }
-
-        # change start
         # Save to file and return the file path
         await save_data_to_json(tenant_id, final_data)
         # change end
+
+        logger.info(f"Successfully fetched {len(users)} users.")
 
     except ODataError as e:
         logger.error(f"Microsoft Graph API error: {e.error.code} - {e.error.message}")
@@ -158,16 +162,15 @@ async def auth_update_tenant(tenant_id: str, client_id: str, client_secret: str)
     Updates a tenant's credentials after validating them.
     Returns the timestamp of the update.
     """
-    # change start
-    if not check_tenant(tenant_id):
+
+    tenant_service = TenantService(tenant_id)
+
+    if not tenant_service.checkTenantExist():
         logger.info(f"Tenant {tenant_id} not initialized, cannot update.")
         raise TenantUpdateError(f"Tenant {tenant_id} not initialized.")
-    # change end
 
     try:
-        # change start
-        await update_tenant(tenant_id, client_id, client_secret)
-        # change end
+        tenant_service.updateTenant(client_id, client_secret)
 
     except (GraphAPIError, TenantNotFoundError) as e:
         # Re-raise validation and not-found errors directly.
