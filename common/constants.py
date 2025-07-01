@@ -11,5 +11,3 @@ class Collection(Enum):
     USER = 'users'
     MAIL = 'mails'
     ATT = 'attachments'
-
-CIPHER_KEY = os.environ['AES_SECRET_KEY'].encode('utf-8')
