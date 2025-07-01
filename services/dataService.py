@@ -31,6 +31,8 @@ Usage:
         {"_id": ObjectId("686204ffd8578e617a242970")},
     )
 
+    dataService.delete_database("123")
+
     data_service.close()
 """
 
@@ -87,7 +89,7 @@ class MongoDataService:
         if not self.client:
             raise ConnectionFailure("MongoDB not connected")
 
-        db_name = f"tenant_{tenant_id}"
+        db_name = tenant_id
 
         logger.log(
             LogLevel.INFO, "MongoDB", f"connected successfully to database: {db_name}"
@@ -335,6 +337,27 @@ class MongoDataService:
                 collection_type=collection_type,
             )
             raise
+
+    def delete_database(self, db_name: str) -> bool:
+        """
+        Delete a database by name.
+
+        Args:
+            db_name: The name of the database to delete.
+
+        Returns:
+            bool: True if the database was deleted successfully, False otherwise.
+        """
+        try:
+            if not self.client:
+                raise ConnectionFailure("MongoDB not connected")
+
+            self.client.drop_database(db_name)
+            logger.log(LogLevel.INFO, "MongoDB", f"Deleted database: {db_name}")
+            return True
+        except PyMongoError as e:
+            logger.log(LogLevel.ERROR, "MongoDB", f"Failed to delete database: {e}")
+            return False
 
     def close(self):
         """close connection"""
