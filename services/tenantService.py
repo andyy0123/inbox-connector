@@ -55,7 +55,6 @@ class TenantService:
             logger.log(LogLevel.ERROR, "TenantService", f"_create_info_data failed: {e}")
             raise
 
-
     def createTenant(self, cid, csecret):
         data = self._create_info_data(cid, csecret)
         

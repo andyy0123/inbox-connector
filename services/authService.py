@@ -34,6 +34,14 @@ class TenantNotFoundError(Exception):
     """Raised when an operation is attempted on a non-existent tenant."""
     pass
 
+class UserNotFoundError(Exception):
+    """Raised when a specific user is not found within a tenant's data."""
+    pass
+
+class MailNotFoundError(Exception):
+    """Raised when a specific mail is not found for a user."""
+    pass
+
 
 @cached(ttl=3600, cache=SimpleMemoryCache)
 async def get_graph_client(tenant_id: str, client_id: str, client_secret: str) -> GraphServiceClient:
