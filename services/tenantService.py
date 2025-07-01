@@ -129,7 +129,7 @@ class TenantService:
 
         doc = self.getTenantUser(user_id)
         if doc and "delta_link" in doc[0]:
-            return doc["delta_link"]
+            return doc[0]["delta_link"]
 
         return ""
 
