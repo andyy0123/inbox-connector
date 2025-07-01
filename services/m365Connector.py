@@ -17,14 +17,14 @@ async def getTenantUserList(client: GraphServiceClient):
         res = await client.users.get()
         users = []
         while True:
-            if not res.odata_next_link:
-                break
             users.extend(
                 [
                     {"id": user.id, "display_name": user.display_name}
                     for user in res.value
                 ]
             )
+            if not res.odata_next_link:
+                break
             res = await client.users.with_url(res.odata_next_link)
         return users
     except APIError as e:
@@ -65,9 +65,6 @@ async def getTenantMailChangeSet(
         res = await user_deltas_requestor.get(delta_query)
 
         while True:
-            if res.odata_delta_link:
-                changes["delta_link"] = res.odata_delta_link
-                break
             changes["mails"].extend(
                 [
                     {
@@ -86,6 +83,9 @@ async def getTenantMailChangeSet(
                     for mail in res.value
                 ]
             )
+            if res.odata_delta_link:
+                changes["delta_link"] = res.odata_delta_link
+                break
             res = await user_deltas_requestor.with_url(res.odata_next_link).get(
                 delta_query
             )
@@ -129,8 +129,6 @@ async def getUserMails(client: GraphServiceClient, user_id: str):
         )
         res = await user_message_requestor.get(user_message_query)
         while True:
-            if not res.odata_next_link:
-                break
             mails.extend(
                 [
                     {
@@ -144,6 +142,8 @@ async def getUserMails(client: GraphServiceClient, user_id: str):
                     for message in res.value
                 ],
             )
+            if not res.odata_next_link:
+                break
             res = await user_message_requestor.with_url(res.odata_next_link).get(
                 user_message_query
             )
