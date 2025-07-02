@@ -3,12 +3,14 @@ from azure.core.exceptions import ClientAuthenticationError
 from msgraph import GraphServiceClient
 
 from datetime import datetime, timezone
+import inspect
 
 from services.dataService import DataService
 from services.m365Connector import getEMLByMessageId, getTenantUserList, deleteMail, getTenantMailChangeSet, getUserMails
 from common.constants import Collection, LogLevel
 from services.tenantService import TenantService
 from logger.operationLogger import OperationLogger
+from services.attService import create_attachment, delete_attachment
 
 logger = OperationLogger()
 data_service = DataService().get_data_service()
@@ -25,8 +27,6 @@ async def getMail(client, tenant_id: str):
         return _response_error(msg)
 
     tenant_service = TenantService(tenant_id)
-    encrypted_db_name = tenant_service.getTenantHashed()
-
     try:
         users = await getTenantUserList(client)
         if not users:
@@ -42,13 +42,13 @@ async def getMail(client, tenant_id: str):
 
             try:
                 infos = await getUserMails(client, user_id)
-                delta_link = infos.get("delta_link", "")
+                delta_link = infos.get("deltalink", "")
                 tenant_service.updateTenantUserDeltaLink(user_id, delta_link)
 
                 mails = infos.get("mails", [])
                 mail_docs = []
                 for msg in mails:
-                    mail_doc = await _process_mail(client, user_id, encrypted_db_name, msg)
+                    mail_doc = await _process_mail(client, user_id, tenant_id, msg)
                     mail_docs.append({"mail": mail_doc})
 
                 users_with_mails.append({
@@ -95,14 +95,15 @@ async def getLatestMail(client: GraphServiceClient, tenant_id):
                     mail_docs.append({"state": "deleted", "data": message_id})
                 else: # need Updated
                     try:
-                        mail_doc = await _process_mail(client, user_id, encrypted_db_name, mail)
+                        mail_doc = await _process_mail(client, user_id, tenant_id, mail)
                         mail_docs.append({"state": "changed", "data": mail_doc})
                     except Exception as e:
                         logger.log(LogLevel.ERROR, "getLatestMail", "Failed to fetch full mail content", message_id=message_id, error=str(e))
-            changes.append({
-                "user_id": user_id,
-                "mails": mail_docs
-            })
+            if mail_docs:
+                changes.append({
+                    "user_id": user_id,
+                    "mails": mail_docs
+                })
         return _response_success(changes)
 
     except ClientAuthenticationError as e:
@@ -138,7 +139,7 @@ async def delMail(client, tenant_id: str, user_id: str, message_id: str):
                 logger.log(LogLevel.ERROR, "DeleteMail", "Failed to delete EML", message_id=message_id, error=str(e))
 
         # 3. remove info stored in attachments collection
-        _process_att_collection(encrypted_db_name, user_id, message_id, [])
+        await _process_att_collection(tenant_id, user_id, message_id, [])
         logger.log(LogLevel.INFO, "DeleteMail", "Deleted attachments", user_id=user_id, message_id=message_id)
 
         # 4. update metadata (soft delete)
@@ -196,16 +197,19 @@ def _response_error(message, code=500):
         "code": code
     }
 
-async def _process_mail(client, user_id, encrypted_db_name, msg: dict):
+async def _process_mail(client, user_id, tenant_id, msg: dict):
     synced_at = _now_iso_time()
     message_id = msg["id"]
     subject = msg["subject"]
     attachments = msg["attachments"]
     has_attachments = bool(attachments)
 
+    tenant_service = TenantService(tenant_id)
+    encrypted_db_name = tenant_service.getTenantHashed()
+
     if has_attachments:
         attachments = sorted(attachments, key=lambda x: (x["id"], x["name"]))
-        _process_att_collection(encrypted_db_name, user_id, message_id, attachments)
+        await _process_att_collection(tenant_id, user_id, message_id, attachments)
 
     # get eml
     try:
@@ -286,7 +290,47 @@ async def _process_mail(client, user_id, encrypted_db_name, msg: dict):
             "content": eml_content if eml_content else ""
     }
 
-def _process_att_collection(encrypted_db_name, user_id, message_id, attachments):
+async def _process_attachment_service_action(
+    action: str,
+    tenant_id: str,
+    user_id: str,
+    message_id: str,
+    attachment_ids: set[str],
+    handler: callable,
+    request_to_m365: bool = False,
+):
+    if not attachment_ids:
+        return True
+
+    if inspect.iscoroutinefunction(handler):
+        result = await handler(
+            tenant_id,
+            user_id=user_id,
+            message_id=message_id,
+            attachment_id=list(attachment_ids),
+            request_to_m365=request_to_m365,
+        )
+    else:
+        result = handler(
+            tenant_id,
+            user_id=user_id,
+            message_id=message_id,
+            attachment_id=list(attachment_ids),
+        )
+
+    if not result:
+        logger.log(
+            LogLevel.ERROR,
+            f"{action}_attachment",
+            f"Failed to {action} attachments for user {user_id}, message {message_id}, ids: {attachment_ids}, request_to_m365: {request_to_m365}."
+        )
+
+    return result
+
+async def _process_att_collection(tenant_id, user_id, message_id, attachments):
+    tenant_service = TenantService(tenant_id)
+    encrypted_db_name = tenant_service.getTenantHashed()
+
     existing_att_docs = data_service.read(encrypted_db_name, Collection.ATT.value, {
         "message_id": message_id,
         "user_id": user_id
@@ -294,11 +338,21 @@ def _process_att_collection(encrypted_db_name, user_id, message_id, attachments)
 
     existing_att_ids = {doc["attachment_id"] for doc in existing_att_docs}
     current_att_ids = {att["id"] for att in attachments}
-
     # attachments needs to be added
-    new_attachments = current_att_ids - existing_att_ids
+    new_att_ids = current_att_ids - existing_att_ids
+    if new_att_ids:
+        await _process_attachment_service_action(
+            action="create",
+            tenant_id=tenant_id,
+            user_id=user_id,
+            message_id=message_id,
+            attachment_ids=new_att_ids,
+            handler=create_attachment,
+        )
 
+    """
     # created new att
+    new_attachments = current_att_ids - existing_att_ids
     for att_id in new_attachments:
         att = next((a for a in attachments if a["id"] == att_id), None)
         if att:
@@ -309,10 +363,22 @@ def _process_att_collection(encrypted_db_name, user_id, message_id, attachments)
                 "name": att["name"]
             }
             data_service.create_one(encrypted_db_name, Collection.ATT.value, att_doc)
+    """
 
     # attachments needs to be deleted
     removed_att_ids = existing_att_ids - current_att_ids
+    if removed_att_ids:
+        await _process_attachment_service_action(
+            action="delete",
+            tenant_id=tenant_id,
+            user_id=user_id,
+            message_id=message_id,
+            attachment_ids=removed_att_ids,
+            handler=delete_attachment,
+            request_to_m365=False,
+        )
 
+    """
     # Removed unexisted att
     for att_id in removed_att_ids:
         data_service.delete_one(encrypted_db_name, Collection.ATT.value, {
@@ -320,6 +386,7 @@ def _process_att_collection(encrypted_db_name, user_id, message_id, attachments)
             "message_id": message_id,
             "attachment_id": att_id
         })
+    """
 
 """
 def _get_user_delta_link(encrypted_db_name: str, user_id: str) -> Optional[str]:
