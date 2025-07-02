@@ -226,7 +226,12 @@ async def delete_attachment(
 ):
     """Deletes a specific attachment from an email."""
     try:
-        await delete_mail_attachment(tenant_id, user_id, message_id, attachment_id)
+        await attachment_service.delete_attachment(
+            tenant_id,
+            user_id=user_id,
+            message_id=message_id,
+            attachment_id=attachment_id,
+        )
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except auth_service.TenantNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

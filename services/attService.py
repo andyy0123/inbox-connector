@@ -2,13 +2,12 @@
 
 from typing import Optional
 from common.constants import Collection
-from m365Connector import deleteAtt
 from msgraph import GraphServiceClient
-from authService import get_graph_client
-from m365Connector import deleteAtt
-from dataService import MongoDataService
+from services.authService import get_graph_client
+from services.m365Connector import deleteAtt
+from services.dataService import MongoDataService
 from services.logService import setup_logger
-from tenantService import TenantService
+from services.tenantService import TenantService
 
 mongo = MongoDataService()
 Success = bool
