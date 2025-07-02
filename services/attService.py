@@ -23,19 +23,21 @@ def create_attachment(
     )
 
     try:
+        tenant = TenantService(tid)
+
         if is_attachment_array:
             data = [
                 {"user_id": user_id, "message_id": message_id, "attachment_id": att_id}
                 for att_id in attachment_id
             ]
-            mongo.create_many(tid, Collection.ATT, data)
+            mongo.create_many(tenant.getTenantHashed(), Collection.ATT, data)
         else:
             data = {
                 "user_id": user_id,
                 "message_id": message_id,
                 "attachment_id": attachment_id,
             }
-            mongo.create_one(tid, Collection.ATT, data)
+            mongo.create_one(tenant.getTenantHashed(), Collection.ATT, data)
         return True
     except Exception as e:
         logger.error(f"Error occurred in create_attachment: {e}")
@@ -61,7 +63,7 @@ async def delete_attachment(
             await deleteAtt(client, user_id, message_id, attachment_id)
 
         mongo.delete_one(
-            tid,
+            tenant.getTenantHashed(),
             "attachments",
             {
                 "user_id": user_id,
@@ -79,8 +81,10 @@ async def get_attachment(
     tid: str, /, user_id: str, message_id: str, attachment_id: str
 ):
     try:
+        tenant = TenantService(tid)
+
         return mongo.read(
-            tid,
+            tenant.getTenantHashed(),
             Collection.ATT,
             {
                 "user_id": user_id,
