@@ -1,14 +1,6 @@
 from typing import Optional
 from azure.core.exceptions import ClientAuthenticationError
 from msgraph import GraphServiceClient
-from msgraph.generated.users.item.mail_folders.item.messages.item.message_item_request_builder import (
-    MessageItemRequestBuilder,
-)
-from msgraph.generated.users.item.mail_folders.item.messages.delta.delta_request_builder import (
-    DeltaRequestBuilder,
-)
-from kiota_abstractions.api_error import APIError
-from kiota_abstractions.base_request_configuration import RequestConfiguration
 
 from datetime import datetime, timezone
 
@@ -103,24 +95,7 @@ async def getLatestMail(client: GraphServiceClient, tenant_id):
                     mail_docs.append({"state": "deleted", "data": message_id})
                 else: # need Updated
                     try:
-                        full_msg = await client.users.by_user_id(user_id) \
-                        .messages.by_message_id(message_id) \
-                        .get(request_configuration=RequestConfiguration(
-                            query_parameters=MessageItemRequestBuilder.MessageItemRequestBuilderGetQueryParameters(
-                                expand=["attachments"]
-                            )
-                        ))
-
-                        simplified_msg = {
-                            "id": full_msg.id,
-                            "subject": full_msg.subject,
-                            "attachments": [
-                                {"id": att.id, "name": att.name}
-                                for att in (full_msg.attachments or [])
-                            ]
-                        }
-
-                        mail_doc = await _process_mail(client, user_id, encrypted_db_name, simplified_msg)
+                        mail_doc = await _process_mail(client, user_id, encrypted_db_name, mail)
                         mail_docs.append({"state": "changed", "data": mail_doc})
                     except Exception as e:
                         logger.log(LogLevel.ERROR, "getLatestMail", "Failed to fetch full mail content", message_id=message_id, error=str(e))
