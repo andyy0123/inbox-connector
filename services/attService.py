@@ -8,6 +8,7 @@ from services.m365Connector import deleteAtt
 from services.dataService import MongoDataService
 from services.logService import setup_logger
 from services.tenantService import TenantService
+from common.cipher import UUIDBase62Cipher
 
 mongo = MongoDataService()
 Success = bool
@@ -28,14 +29,14 @@ def create_attachment(
                 {"user_id": user_id, "message_id": message_id, "attachment_id": att_id}
                 for att_id in attachment_id
             ]
-            mongo.create_many(tid, Collection.ATT, data)
+            mongo.create_many(UUIDBase62Cipher.encode(tid), Collection.ATT, data)
         else:
             data = {
                 "user_id": user_id,
                 "message_id": message_id,
                 "attachment_id": attachment_id,
             }
-            mongo.create_one(tid, Collection.ATT, data)
+            mongo.create_one(UUIDBase62Cipher.encode(tid), Collection.ATT, data)
         return True
     except Exception as e:
         logger.error(f"Error occurred in create_attachment: {e}")
@@ -61,7 +62,7 @@ async def delete_attachment(
             await deleteAtt(client, user_id, message_id, attachment_id)
 
         mongo.delete_one(
-            tid,
+            UUIDBase62Cipher.encode(tid),
             "attachments",
             {
                 "user_id": user_id,
@@ -80,7 +81,7 @@ async def get_attachment(
 ):
     try:
         return mongo.read(
-            tid,
+            UUIDBase62Cipher.encode(tid),
             Collection.ATT,
             {
                 "user_id": user_id,
