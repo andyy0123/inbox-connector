@@ -42,7 +42,7 @@ async def getMail(client, tenant_id: str):
 
             try:
                 infos = await getUserMails(client, user_id)
-                delta_link = infos.get("delta_link", "")
+                delta_link = infos.get("deltalink", "")
                 tenant_service.updateTenantUserDeltaLink(user_id, delta_link)
 
                 mails = infos.get("mails", [])
@@ -99,10 +99,11 @@ async def getLatestMail(client: GraphServiceClient, tenant_id):
                         mail_docs.append({"state": "changed", "data": mail_doc})
                     except Exception as e:
                         logger.log(LogLevel.ERROR, "getLatestMail", "Failed to fetch full mail content", message_id=message_id, error=str(e))
-            changes.append({
-                "user_id": user_id,
-                "mails": mail_docs
-            })
+            if mail_docs:
+                changes.append({
+                    "user_id": user_id,
+                    "mails": mail_docs
+                })
         return _response_success(changes)
 
     except ClientAuthenticationError as e:
