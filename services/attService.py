@@ -91,3 +91,15 @@ async def get_attachment(
         )
     except Exception as e:
         logger.error(f"Error occurred in get_attachment: {e}")
+
+
+async def get_all_attachments(tid: str, /, user_id: str, message_id: str) -> list[dict]:
+    try:
+        return mongo.read(
+            UUIDBase62Cipher.encode(tid),
+            Collection.ATT,
+            {"user_id": user_id, "message_id": message_id},
+        )
+    except Exception as e:
+        logger.error(f"Error occurred in get_attachments: {e}")
+        return []

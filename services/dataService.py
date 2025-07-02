@@ -52,7 +52,10 @@ from gridfs import GridFS
 from bson import ObjectId
 
 logger = OperationLogger()
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://admin:password@localhost:27017")
+MONGODB_URL = os.getenv(
+    "MONGODB_URL",
+    "mongodb://admin:password@localhost:27020/inbox_connector_db?authSource=admin",
+)
 
 
 class MongoDataService:
@@ -378,7 +381,9 @@ class MongoDataService:
         fs = self.get_gridfs(encrypted_db_name)
         fs.delete(ObjectId(eml_file_id))
 
-    def save_or_update_eml(self, encrypted_db_name: str, message_id: str, eml_content: bytes) -> str:
+    def save_or_update_eml(
+        self, encrypted_db_name: str, message_id: str, eml_content: bytes
+    ) -> str:
         """
         Save or update EML file for a message using GridFS.
 
@@ -395,8 +400,13 @@ class MongoDataService:
         for old in fs.find({"filename": f"{message_id}.eml"}):
             fs.delete(old._id)
 
-        new_file_id = fs.put(eml_content, filename=f"{message_id}.eml", metadata={"message_id": message_id})
+        new_file_id = fs.put(
+            eml_content,
+            filename=f"{message_id}.eml",
+            metadata={"message_id": message_id},
+        )
         return str(new_file_id)
+
 
 class DataService:
     """DataService Singleton Class"""
