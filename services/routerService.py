@@ -211,7 +211,9 @@ async def get_attachments_list(
 ):
     """Retrieves a list of all attachments for a specific email via Graph API."""
     try:
-        attachments = await get_mail_attachments_list(tenant_id, user_id, message_id)
+        attachments = await get_all_attachments(
+            tenant_id, user_id=user_id, message_id=message_id
+        )
         return attachments
     except auth_service.TenantNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

@@ -8,6 +8,7 @@ from msgraph.generated.models.o_data_errors.o_data_error import ODataError
 
 from services.logService import setup_logger
 from services.m365Connector import getTenantUserList, getTenantAllMails
+
 # from services.mailService import getMail
 from services.tenantService import TenantService
 
@@ -18,35 +19,50 @@ logger = setup_logger(__name__)
 # --- Custom Exceptions ---
 class TenantInitializationError(Exception):
     """For business logic errors during the initialization process."""
+
     pass
+
 
 class GraphAPIError(Exception):
     """For wrapping errors from the Graph API."""
+
     pass
+
 
 class AlreadyInitializedError(Exception):
     """Raised when trying to initialize a tenant that already exists."""
+
     pass
+
 
 class TenantUpdateError(Exception):
     """For business logic errors during the update process."""
+
     pass
+
 
 class TenantNotFoundError(Exception):
     """Raised when an operation is attempted on a non-existent tenant."""
+
     pass
+
 
 class UserNotFoundError(Exception):
     """Raised when a specific user is not found within a tenant's data."""
+
     pass
+
 
 class MailNotFoundError(Exception):
     """Raised when a specific mail is not found for a user."""
+
     pass
 
 
 @cached(ttl=3600, cache=SimpleMemoryCache)
-async def get_graph_client(tenant_id: str, client_id: str, client_secret: str) -> GraphServiceClient:
+async def get_graph_client(
+    tenant_id: str, client_id: str, client_secret: str
+) -> GraphServiceClient:
     """
     Creates and caches a GraphServiceClient instance for a given tenant.
     Validates credentials by making a test API call.
@@ -54,18 +70,22 @@ async def get_graph_client(tenant_id: str, client_id: str, client_secret: str) -
     logger.info(f"Creating a new GraphServiceClient instance for tenant {tenant_id}.")
     try:
         credential = ClientSecretCredential(
-            tenant_id=tenant_id,
-            client_id=client_id,
-            client_secret=client_secret
+            tenant_id=tenant_id, client_id=client_id, client_secret=client_secret
         )
-        client = GraphServiceClient(credentials=credential, scopes=['https://graph.microsoft.com/.default'])
+        client = GraphServiceClient(
+            credentials=credential, scopes=["https://graph.microsoft.com/.default"]
+        )
         await client.users.get()
         return client
     except ClientAuthenticationError as e:
         logger.error(f"Authentication failed for tenant {tenant_id}: {e}")
-        raise GraphAPIError("Authentication failed. Please check Tenant ID, Client ID, and Client Secret.")
+        raise GraphAPIError(
+            "Authentication failed. Please check Tenant ID, Client ID, and Client Secret."
+        )
     except Exception as e:
-        logger.error(f"An unknown error occurred while creating GraphServiceClient: {e}")
+        logger.error(
+            f"An unknown error occurred while creating GraphServiceClient: {e}"
+        )
         raise GraphAPIError(f"An unknown error occurred while creating the client: {e}")
 
 
@@ -75,7 +95,7 @@ async def save_data_to_json(tenant_id, data: dict):
     filename = f"{tenant_id}_data.json"
     logger.info(f"Saving data to {filename}...")
     try:
-        with open(filename, 'w', encoding='utf-8') as f:
+        with open(filename, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False, default=str)
         logger.info(f"Data successfully saved to {filename}.")
         return filename
@@ -90,10 +110,13 @@ async def update_tenant(tenant_id, client_id, client_secret):
 
 def check_tenant(tenant_id: str) -> bool:
     import os
+
     output_filename = f"{tenant_id}_graph_data.json"
     test = os.path.exists(output_filename)
     print(f"test {test}")
     return os.path.exists(output_filename)
+
+
 # change end
 
 
@@ -105,7 +128,9 @@ async def auth_init_tenant(tenant_id: str, client_id: str, client_secret: str) -
     tenant_service = TenantService(tenant_id)
 
     if tenant_service.checkTenantExist():
-        logger.info(f"Data file already exists for tenant {tenant_id}. Skipping data fetch.")
+        logger.info(
+            f"Data file already exists for tenant {tenant_id}. Skipping data fetch."
+        )
         raise AlreadyInitializedError(f"Tenant {tenant_id} already initialized.")
 
     try:
@@ -135,7 +160,7 @@ async def auth_init_tenant(tenant_id: str, client_id: str, client_secret: str) -
             "client_id": client_id,
             "client_secret": client_secret,
             "users": users,
-            "mails": mail_results
+            "mails": mail_results,
         }
         # Save to file and return the file path
         await save_data_to_json(tenant_id, final_data)
@@ -152,7 +177,10 @@ async def auth_init_tenant(tenant_id: str, client_id: str, client_secret: str) -
         raise e
 
     except Exception as e:
-        logger.critical(f"Unexpected error during initialization for tenant '{tenant_id}': {e}", exc_info=True)
+        logger.critical(
+            f"Unexpected error during initialization for tenant '{tenant_id}': {e}",
+            exc_info=True,
+        )
         # Wrap in a generic error to avoid leaking details
         raise TenantInitializationError("An unknown internal error occurred.")
 
@@ -176,5 +204,10 @@ async def auth_update_tenant(tenant_id: str, client_id: str, client_secret: str)
         # Re-raise validation and not-found errors directly.
         raise e
     except Exception as e:
-        logger.critical(f"An unexpected critical error occurred during the update process for '{tenant_id}': {e}", exc_info=True)
-        raise TenantUpdateError("An unknown internal error occurred during the update process.")
+        logger.critical(
+            f"An unexpected critical error occurred during the update process for '{tenant_id}': {e}",
+            exc_info=True,
+        )
+        raise TenantUpdateError(
+            "An unknown internal error occurred during the update process."
+        )
