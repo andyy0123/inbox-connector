@@ -48,6 +48,9 @@ from pymongo.errors import ConnectionFailure, PyMongoError
 from logger.operationLogger import OperationLogger
 from common.constants import LogLevel
 
+from gridfs import GridFS
+from bson import ObjectId
+
 logger = OperationLogger()
 MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://admin:password@localhost:27017")
 
@@ -123,8 +126,7 @@ class MongoDataService:
         if not self.client:
             raise ConnectionFailure("MongoDB not connected")
 
-        db_name = f"tenant_{tenant_id}"
-        return db_name in self.client.list_database_names()
+        return tenant_id in self.client.list_database_names()
 
     def create_one(
         self, tenant_id: str, collection_type: str, document: Dict[str, Any]
@@ -365,6 +367,36 @@ class MongoDataService:
             self.client.close()
             logger.log(LogLevel.INFO, "MongoDB", "closed connection")
 
+    def get_gridfs(self, tenant_id: str) -> GridFS:
+        """
+        Get GridFS instance for the given encrypted tenant DB name.
+        """
+        db = self._get_tenant_database(tenant_id)
+        return GridFS(db)
+
+    def delete_eml(self, encrypted_db_name: str, eml_file_id: str):
+        fs = self.get_gridfs(encrypted_db_name)
+        fs.delete(ObjectId(eml_file_id))
+
+    def save_or_update_eml(self, encrypted_db_name: str, message_id: str, eml_content: bytes) -> str:
+        """
+        Save or update EML file for a message using GridFS.
+
+        Args:
+        encrypted_db_name: database name (encrypted tenant ID)
+        message_id: ID of the message (used as filename)
+        eml_content: raw EML content (as bytes)
+
+        Returns:
+        str: new file_id
+        """
+        fs = self.get_gridfs(encrypted_db_name)
+
+        for old in fs.find({"filename": f"{message_id}.eml"}):
+            fs.delete(old._id)
+
+        new_file_id = fs.put(eml_content, filename=f"{message_id}.eml", metadata={"message_id": message_id})
+        return str(new_file_id)
 
 class DataService:
     """DataService Singleton Class"""

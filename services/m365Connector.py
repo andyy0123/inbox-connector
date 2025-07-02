@@ -2,9 +2,6 @@
 from typing import Optional
 from azure.core.exceptions import ClientAuthenticationError
 from msgraph import GraphServiceClient
-from msgraph.generated.users.item.mail_folders.item.messages.item.message_item_request_builder import (
-    MessageItemRequestBuilder,
-)
 from msgraph.generated.users.item.mail_folders.item.messages.delta.delta_request_builder import (
     DeltaRequestBuilder,
 )
@@ -17,14 +14,14 @@ async def getTenantUserList(client: GraphServiceClient):
         res = await client.users.get()
         users = []
         while True:
-            if not res.odata_next_link:
-                break
             users.extend(
                 [
                     {"id": user.id, "display_name": user.display_name}
                     for user in res.value
                 ]
             )
+            if not res.odata_next_link:
+                break
             res = await client.users.with_url(res.odata_next_link)
         return users
     except APIError as e:
@@ -50,13 +47,13 @@ async def getTenantMailChangeSet(
         )
         user_deltas_requestor: DeltaRequestBuilder = (
             (
-                await client.users.by_user_id(user_id)
+                client.users.by_user_id(user_id)
                 .mail_folders.by_mail_folder_id("inbox")
                 .messages.delta.with_url(deltalink)
             )
             if deltalink
             else (
-                await client.users.by_user_id(user_id)
+                client.users.by_user_id(user_id)
                 .mail_folders.by_mail_folder_id("inbox")
                 .messages.delta
             )
@@ -65,9 +62,6 @@ async def getTenantMailChangeSet(
         res = await user_deltas_requestor.get(delta_query)
 
         while True:
-            if res.odata_delta_link:
-                changes["delta_link"] = res.odata_delta_link
-                break
             changes["mails"].extend(
                 [
                     {
@@ -86,6 +80,9 @@ async def getTenantMailChangeSet(
                     for mail in res.value
                 ]
             )
+            if res.odata_delta_link:
+                changes["delta_link"] = res.odata_delta_link
+                break
             res = await user_deltas_requestor.with_url(res.odata_next_link).get(
                 delta_query
             )
@@ -117,6 +114,7 @@ async def getEMLByMessageId(client: GraphServiceClient, user_id: str, message_id
 async def getUserMails(client: GraphServiceClient, user_id: str):
     try:
         mails = []
+        deltalink = ""
         user_message_requestor = (
             client.users.by_user_id(user_id)
             .mail_folders.by_mail_folder_id("inbox")
@@ -129,8 +127,6 @@ async def getUserMails(client: GraphServiceClient, user_id: str):
         )
         res = await user_message_requestor.get(user_message_query)
         while True:
-            if not res.odata_next_link:
-                break
             mails.extend(
                 [
                     {
@@ -144,10 +140,13 @@ async def getUserMails(client: GraphServiceClient, user_id: str):
                     for message in res.value
                 ],
             )
+            if res.odata_delta_link:
+                deltalink = res.odata_delta_link
+                break
             res = await user_message_requestor.with_url(res.odata_next_link).get(
                 user_message_query
             )
-        return mails
+        return { "deltalink": deltalink, "mails": mails }
     except APIError as e:
         print(f"Error occured when calling getUserMails: {e.message}")
     except ClientAuthenticationError as e:
@@ -162,11 +161,12 @@ async def getTenantAllMails(client: GraphServiceClient):
         users_with_mails = []
 
         for user in users:
-            mails = await getUserMails(client, user["id"])
+            res = await getUserMails(client, user["id"])
             users_with_mails.append(
                 {
                     "user_id": user["id"],
-                    "mails": mails,
+                    "deltalink": res["deltalink"],
+                    "mails": res["mails"],
                 }
             )
         return users_with_mails

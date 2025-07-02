@@ -25,20 +25,56 @@ class SuccessResponse(BaseModel):
 
 
 # change start
+import services.m365Connector as m365API
+from services.tenantService import TenantService
+
+
+async def get_graph_client(tenant_id):
+    tenant_service = TenantService(tenant_id)
+    client_ID = tenant_service.getTenantAppId()
+    client_secret = tenant_service.getTenantAppSecret()
+    graph_clinet = await auth_service.get_graph_client(
+        tenant_id, client_ID, client_secret
+    )
+    return graph_clinet
+
+
+async def get_user_list_API(tenant_id):
+    graph_client = await get_graph_client(tenant_id)
+    userList = await m365API.getTenantUserList(graph_client)
+    return userList
+
+
+async def get_user_mails_API(tenant_id, user_id):
+    graph_client = await get_graph_client(tenant_id)
+    mails = await m365API.getUserMails(graph_client, user_id)
+    return mails
+
+
 async def get_all_users(tenant_id):
-    return tenant_id
+    user_list = await get_user_list_API(tenant_id)
+    return user_list
 
 
 async def get_specific_user(tenant_id, user_id):
-    return user_id
+    user_list = await get_user_list_API(tenant_id)
+    for user in user_list:
+        if user.get("id") == user_id:
+            return user
+    return None
 
 
 async def get_user_all_mail(tenant_id, user_id):
-    return "all mail"
+    user_mails = await get_user_mails_API(tenant_id, user_id)
+    return user_mails
 
 
 async def get_specific_mail(tenant_id, user_id, message_id):
-    return message_id
+    user_mails = await get_user_mails_API(tenant_id, user_id)
+    for mail in user_mails.get("mails", []):
+        if mail.get("id") == message_id:
+            return mail
+    return None
 
 
 async def get_mail_attachments_list(tenant_id, user_id, message_id):
@@ -237,3 +273,13 @@ async def delete_attachment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except auth_service.GraphAPIError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.delete("/test/delete_database/{tenant_id}")
+async def delete_database(tenant_id: str):
+    """test for delete database"""
+    from services.tenantService import TenantService
+
+    tenant_service = TenantService(tenant_id)
+    tenant_service.delete()
+    return {"ok": True}
