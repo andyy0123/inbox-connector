@@ -118,7 +118,6 @@ class TenantService:
 
         if info and "cid" in info:
             try:
-                print(info["cid"])
                 return self.__aes_cipher.decrypt(info["cid"])
             except Exception as e:
                 logger.log(
@@ -147,7 +146,7 @@ class TenantService:
 
     def getTenantUser(self, user_id=None):
         """if user_id in None return all users"""
-        query = {"user_id": user_id} if user_id else {}
+        query = {"id": user_id} if user_id else {}
         return mongo_service.read(self.__tenant_hash, Collection.USER, query)
 
     def getTenantUseDeltaLink(self, user_id):

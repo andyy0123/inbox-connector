@@ -7,6 +7,8 @@ from msgraph.generated.users.item.mail_folders.item.messages.delta.delta_request
 )
 from kiota_abstractions.api_error import APIError
 from kiota_abstractions.base_request_configuration import RequestConfiguration
+from services.logService import setup_logger
+logger = setup_logger(__name__)
 
 
 async def getTenantUserList(client: GraphServiceClient):
@@ -25,9 +27,9 @@ async def getTenantUserList(client: GraphServiceClient):
             res = await client.users.with_url(res.odata_next_link)
         return users
     except APIError as e:
-        print(f"Error occured when calling getTenantMails: {e.message}")
+        logger.error(f"Error occured when calling getTenantMails: {e.message}", exc_info=True)
     except ClientAuthenticationError as e:
-        print(
+        logger.error(
             f"Authentication failed, you might want to check if your client secret is still alive: {e.message}"
         )
 
@@ -88,9 +90,9 @@ async def getTenantMailChangeSet(
             )
         return changes
     except APIError as e:
-        print(f"Error occured when calling getTenantMails: {e.message}")
+        logger.error(f"Error occured when calling getTenantMails: {e.message}", exc_info=True)
     except ClientAuthenticationError as e:
-        print(
+        logger.error(
             f"Authentication failed, you might want to check if your client secret is still alive: {e.message}"
         )
 
@@ -104,9 +106,9 @@ async def getEMLByMessageId(client: GraphServiceClient, user_id: str, message_id
         )
         return content
     except APIError as e:
-        print(f"Error occured when calling getTenantMails: {e.message}")
+        logger.error(f"Error occured when calling getTenantMails: {e.message}", exc_info=True)
     except ClientAuthenticationError as e:
-        print(
+        logger.error(
             f"Authentication failed, you might want to check if your client secret is still alive: {e.message}"
         )
 
@@ -148,9 +150,9 @@ async def getUserMails(client: GraphServiceClient, user_id: str):
             )
         return { "deltalink": deltalink, "mails": mails }
     except APIError as e:
-        print(f"Error occured when calling getUserMails: {e.message}")
+        logger.error(f"Error occured when calling getUserMails: {e.message}")
     except ClientAuthenticationError as e:
-        print(
+        logger.error(
             f"Authentication failed, you might want to check if your client secret is still alive: {e.message}"
         )
 
@@ -171,9 +173,9 @@ async def getTenantAllMails(client: GraphServiceClient):
             )
         return users_with_mails
     except APIError as e:
-        print(f"Error occured when calling getTenantAllMails: {e.message}")
+        logger.error(f"Error occured when calling getTenantAllMails: {e.message}")
     except ClientAuthenticationError as e:
-        print(
+        logger.error(
             f"Authentication failed, you might want to check if your client secret is still alive: {e.message}"
         )
 
@@ -184,9 +186,9 @@ async def deleteMail(client: GraphServiceClient, user_id: str, message_id: str):
             client.users.by_user_id(user_id).messages.by_message_id(message_id).delete()
         )
     except APIError as e:
-        print(f"Error occured when calling getTenantMails: {e.message}")
+        logger.error(f"Error occured when calling getTenantMails: {e.message}", exc_info=True)
     except ClientAuthenticationError as e:
-        print(
+        logger.error(
             f"Authentication failed, you might want to check if your client secret is still alive: {e.message}"
         )
 
@@ -202,8 +204,8 @@ async def deleteAtt(
             .delete()
         )
     except APIError as e:
-        print(f"Error occured when calling getTenantMails: {e.message}")
+        logger.error(f"Error occured when calling getTenantMails: {e.message}", exc_info=True)
     except ClientAuthenticationError as e:
-        print(
+        logger.error(
             f"Authentication failed, you might want to check if your client secret is still alive: {e.message}"
         )

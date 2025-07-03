@@ -9,7 +9,7 @@ from msgraph.generated.models.o_data_errors.o_data_error import ODataError
 from services.logService import setup_logger
 from services.m365Connector import getTenantUserList, getTenantAllMails
 
-# from services.mailService import getMail
+from services.mailService import getMail
 from services.tenantService import TenantService
 
 
@@ -89,37 +89,6 @@ async def get_graph_client(
         raise GraphAPIError(f"An unknown error occurred while creating the client: {e}")
 
 
-# change start
-async def save_data_to_json(tenant_id, data: dict):
-    """Saves data to a specified JSON file."""
-    filename = f"{tenant_id}_data.json"
-    logger.info(f"Saving data to {filename}...")
-    try:
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False, default=str)
-        logger.info(f"Data successfully saved to {filename}.")
-        return filename
-    except IOError as e:
-        logger.error(f"Failed to write to file {filename}: {e}")
-        raise
-
-
-async def update_tenant(tenant_id, client_id, client_secret):
-    pass
-
-
-def check_tenant(tenant_id: str) -> bool:
-    import os
-
-    output_filename = f"{tenant_id}_graph_data.json"
-    test = os.path.exists(output_filename)
-    print(f"test {test}")
-    return os.path.exists(output_filename)
-
-
-# change end
-
-
 # --- Core Service Functions ---
 async def auth_init_tenant(tenant_id: str, client_id: str, client_secret: str) -> None:
     """
@@ -138,33 +107,14 @@ async def auth_init_tenant(tenant_id: str, client_id: str, client_secret: str) -
 
         logger.info(f"Fetching user and mail data for tenant {tenant_id}...")
         tenant_service.createTenant(client_id, client_secret)
-        tasks = [getTenantUserList(client), getTenantAllMails(client)]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        users, mail_results = results
-
-        # Check and handle errors from parallel tasks
-        if isinstance(users, Exception):
-            raise GraphAPIError(f"Failed to fetch user list: {users}")
-        if isinstance(mail_results, Exception):
-            raise GraphAPIError(f"Failed to fetch mail: {mail_results}")
+        await getMail(client, tenant_id)
+        users = await getTenantUserList(client)
 
         if not users:
             logger.warning(f"No users found in tenant {tenant_id}.")
             raise TenantInitializationError("No users found, initialization aborted.")
 
         tenant_service.insertUserList(users)
-
-        # change start
-        final_data = {
-            "tenant_id": tenant_id,
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "users": users,
-            "mails": mail_results,
-        }
-        # Save to file and return the file path
-        await save_data_to_json(tenant_id, final_data)
-        # change end
 
         logger.info(f"Successfully fetched {len(users)} users.")
 

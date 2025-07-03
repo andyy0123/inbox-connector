@@ -2,10 +2,9 @@ import uvicorn
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from services.routerService import router as tenant_router
+from services.routerService import sync_data_cron
 from contextlib import asynccontextmanager
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.interval import IntervalTrigger
-from datetime import datetime
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from services.dataService import DataService
 from services.logService import setup_logger
@@ -14,12 +13,8 @@ from services.logService import setup_logger
 data_service = None
 logger = setup_logger(__name__)
 
-def my_daily_task():
-    logger.info(f"Task is running at {datetime.now()}")
-
-scheduler = BackgroundScheduler()
-trigger = IntervalTrigger(minutes=5)
-scheduler.add_job(my_daily_task, trigger)
+scheduler = AsyncIOScheduler()
+scheduler.add_job(sync_data_cron, 'interval', minutes=5)
 scheduler.start()
 
 @asynccontextmanager
