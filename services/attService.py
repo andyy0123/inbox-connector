@@ -3,7 +3,6 @@
 from typing import Optional
 from common.constants import Collection
 from msgraph import GraphServiceClient
-from services.authService import get_graph_client
 from services.m365Connector import deleteAtt
 from services.dataService import MongoDataService
 from services.logService import setup_logger
@@ -17,7 +16,7 @@ logger = setup_logger(__name__)
 
 
 def create_attachment(
-    tid: str, /, user_id: str, message_id: str, attachment_id: str | list[str]
+    client, tid: str, /, user_id: str, message_id: str, attachment_id: str | list[str]
 ) -> Success:
     is_attachment_array = hasattr(attachment_id, "__len__") and (
         not isinstance(attachment_id, str)
@@ -44,6 +43,7 @@ def create_attachment(
 
 
 async def delete_attachment(
+    client: GraphServiceClient,
     tid: str,
     /,
     user_id: str,
@@ -54,16 +54,16 @@ async def delete_attachment(
     try:
         tenant = TenantService(tid)
 
-        client: GraphServiceClient = await get_graph_client(
-            tid, tenant.getTenantAppId(), tenant.getTenantAppSecret()
-        )
+        # client: GraphServiceClient = await get_graph_client(
+        #     tid, tenant.getTenantAppId(), tenant.getTenantAppSecret()
+        # )
 
         if request_to_m365:
             await deleteAtt(client, user_id, message_id, attachment_id)
 
         mongo.delete_one(
             UUIDBase62Cipher.encode(tid),
-            "attachments",
+            Collection.ATT,
             {
                 "user_id": user_id,
                 "message_id": message_id,
@@ -72,7 +72,7 @@ async def delete_attachment(
         )
         return True
     except Exception as e:
-        logger.error(f"Error occurred in delete_attachment: {e}")
+        logger.error(f"Error occurred in delete_attachment: {e}", exc_info=True)
         return False
 
 

@@ -65,7 +65,8 @@ async def getMail(client, tenant_id: str):
 
     except Exception as e:
         logger.log(LogLevel.ERROR, "getMail", "Unexpected error", tenant=tenant_id, error=str(e))
-        return _response_error(str(e))
+        raise
+        # return _response_error(str(e))
 
 async def getLatestMail(client: GraphServiceClient, tenant_id):
     logger.log(LogLevel.INFO, "getLatestMail", "try to getLatestMail", tenant_id=tenant_id)
@@ -109,7 +110,9 @@ async def getLatestMail(client: GraphServiceClient, tenant_id):
         return _response_success(changes)
 
     except ClientAuthenticationError as e:
-        print(f"Authentication failed: {e.message}")
+        logger.log(LogLevel.ERROR, "getLatestMail", f"Authentication failed: {e.message}")
+        raise
+        # print(f"Authentication failed: {e.message}")
 
 async def delMail(client, tenant_id: str, user_id: str, message_id: str):
     logger.log(LogLevel.INFO, "DeleteMail", "Try to delete mail", tenant=tenant_id, user_id=user_id, message_id=message_id)
@@ -122,7 +125,7 @@ async def delMail(client, tenant_id: str, user_id: str, message_id: str):
 
         # try to clear info stored on our system
         # 1. query does this mail exist in our system
-        existing = data_service.read(encrypted_db_name, Collection.MAIL.value, {
+        existing = data_service.read(encrypted_db_name, Collection.MAIL, {
             "user_id": user_id,
             "message_id": message_id
         })
@@ -130,6 +133,8 @@ async def delMail(client, tenant_id: str, user_id: str, message_id: str):
         if not existing:
             logger.log(LogLevel.WARNING, "DeleteMail", "Message not found", tenant=tenant_id, message_id=message_id)
             return _response_error("Message not found")
+        # else:
+        #     data_service.delete_one(encrypted_db_name, Collection.MAIL, {"message_id": message_id})
 
         mail_doc = existing[0]
         # 2. remove eml
@@ -139,9 +144,10 @@ async def delMail(client, tenant_id: str, user_id: str, message_id: str):
                 logger.log(LogLevel.INFO, "DeleteMail", "Deleted EML from GridFS", message_id=message_id)
             except Exception as e:
                 logger.log(LogLevel.ERROR, "DeleteMail", "Failed to delete EML", message_id=message_id, error=str(e))
+                raise
 
         # 3. remove info stored in attachments collection
-        await _process_att_collection(tenant_id, user_id, message_id, [])
+        await _process_att_collection(client, tenant_id, user_id, message_id, [])
         logger.log(LogLevel.INFO, "DeleteMail", "Deleted attachments", user_id=user_id, message_id=message_id)
 
         # 4. update metadata (soft delete)
@@ -171,7 +177,8 @@ async def delMail(client, tenant_id: str, user_id: str, message_id: str):
         return _response_success([])
     except Exception as e:
         logger.log(LogLevel.ERROR, "DeleteMail", "Unexpected error", tenant=tenant_id, message_id=message_id, error=str(e))
-        return _response_error(f"Unexpected error: {str(e)}")
+        raise
+        # return _response_error(f"Unexpected error: {str(e)}")
 
 
 def _now_iso_time():
@@ -211,14 +218,15 @@ async def _process_mail(client, user_id, tenant_id, msg: dict):
 
     if has_attachments:
         attachments = sorted(attachments, key=lambda x: (x["id"], x["name"]))
-        await _process_att_collection(tenant_id, user_id, message_id, attachments)
+        await _process_att_collection(client, tenant_id, user_id, message_id, attachments)
 
     # get eml
     try:
         eml_content = await getEMLByMessageId(client, user_id, message_id)
     except Exception as e:
         logger.log(LogLevel.ERROR, "EML", "Failed to get EML", user_id=user_id, message_id=message_id, error=str(e))
-        eml_content = None
+        raise
+        # eml_content = None
 
     eml_file_id = None
     if eml_content:
@@ -293,19 +301,21 @@ async def _process_mail(client, user_id, tenant_id, msg: dict):
     }
 
 async def _process_attachment_service_action(
+    client,
     action: str,
     tenant_id: str,
     user_id: str,
     message_id: str,
     attachment_ids: set[str],
     handler: callable,
-    request_to_m365: bool = False,
+    request_to_m365: bool = True,
 ):
     if not attachment_ids:
         return True
 
     if inspect.iscoroutinefunction(handler):
         result = await handler(
+            client,
             tenant_id,
             user_id=user_id,
             message_id=message_id,
@@ -314,6 +324,7 @@ async def _process_attachment_service_action(
         )
     else:
         result = handler(
+            client,
             tenant_id,
             user_id=user_id,
             message_id=message_id,
@@ -329,7 +340,7 @@ async def _process_attachment_service_action(
 
     return result
 
-async def _process_att_collection(tenant_id, user_id, message_id, attachments):
+async def _process_att_collection(client, tenant_id, user_id, message_id, attachments):
     tenant_service = TenantService(tenant_id)
     encrypted_db_name = tenant_service.getTenantHashed()
 
@@ -344,6 +355,7 @@ async def _process_att_collection(tenant_id, user_id, message_id, attachments):
     new_att_ids = current_att_ids - existing_att_ids
     if new_att_ids:
         await _process_attachment_service_action(
+            client=client,
             action="create",
             tenant_id=tenant_id,
             user_id=user_id,
@@ -356,11 +368,12 @@ async def _process_att_collection(tenant_id, user_id, message_id, attachments):
     removed_att_ids = existing_att_ids - current_att_ids
     if removed_att_ids:
         await _process_attachment_service_action(
+            client=client,
             action="delete",
             tenant_id=tenant_id,
             user_id=user_id,
             message_id=message_id,
             attachment_ids=removed_att_ids,
             handler=delete_attachment,
-            request_to_m365=False,
+            request_to_m365=True,
         )

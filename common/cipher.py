@@ -28,7 +28,6 @@ class AESCipher:
         iv = enc_bytes[:16]
         ct = enc_bytes[16:]
         cipher = AES.new(self.key, AES.MODE_CBC, iv)
-        print(cipher.decrypt(ct)[-1])
         raw_bytes = unpad(cipher.decrypt(ct), AES.block_size)
 
         return raw_bytes.decode("utf-8")

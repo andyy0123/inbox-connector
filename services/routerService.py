@@ -4,7 +4,11 @@ from fastapi import APIRouter, HTTPException, Body, Path, status, Response
 
 import services.authService as auth_service
 import services.attService as attachment_service
+from services.logService import setup_logger
 
+from datetime import datetime
+
+logger = setup_logger(__name__)
 router = APIRouter(prefix="/tenant", tags=["Tenant Management"])
 
 
@@ -27,6 +31,12 @@ class SuccessResponse(BaseModel):
 # change start
 import services.m365Connector as m365API
 from services.tenantService import TenantService
+from services.dataService import DataService
+import services.mailService as mail_service
+from common.constants import Collection
+from common.cipher import UUIDBase62Cipher
+
+data_service = DataService().get_data_service()
 
 
 async def get_graph_client(tenant_id):
@@ -39,15 +49,33 @@ async def get_graph_client(tenant_id):
     return graph_clinet
 
 
+async def sync_data_cron():
+    db_names = data_service.client.list_database_names()
+    tenants = [database for database in db_names if database not in ["admin", "config", "local"]]
+    for tenant in tenants:
+        tenant_id = UUIDBase62Cipher.decode(tenant)
+        graph_client = await get_graph_client(tenant_id)
+        latest_mail = await mail_service.getLatestMail(graph_client, tenant_id)
+    logger.info(f"Task is running at {datetime.now()}")
+
+
 async def get_user_list_API(tenant_id):
-    graph_client = await get_graph_client(tenant_id)
-    userList = await m365API.getTenantUserList(graph_client)
-    return userList
+    tenant_service = TenantService(tenant_id)
+    hash_tid = tenant_service.getTenantHashed()
+    collection_user = Collection.USER
+    query = {}
+    user_list = data_service.read(hash_tid, collection_user, query)
+    logger.info(user_list)
+    return user_list
 
 
 async def get_user_mails_API(tenant_id, user_id):
     graph_client = await get_graph_client(tenant_id)
-    mails = await m365API.getUserMails(graph_client, user_id)
+    tenant_service = TenantService(tenant_id)
+    hash_tid = tenant_service.getTenantHashed()
+    collection_mail = Collection.MAIL
+    query = {"user_id": user_id}
+    mails = data_service.read(hash_tid, collection_mail, query)
     return mails
 
 
@@ -71,28 +99,24 @@ async def get_user_all_mail(tenant_id, user_id):
 
 async def get_specific_mail(tenant_id, user_id, message_id):
     user_mails = await get_user_mails_API(tenant_id, user_id)
-    for mail in user_mails.get("mails", []):
-        if mail.get("id") == message_id:
+    for mail in user_mails:
+        if mail.get("message_id") == message_id:
             return mail
     return None
 
-
-async def get_mail_attachments_list(tenant_id, user_id, message_id):
-    return "all attachments"
-
-
-async def get_specific_attachment(tenant_id, user_id, message_id, attachment_id):
-    return attachment_id
-
-
-async def delete_user_mail(tenant_id, user_id, message_id):
-    pass
-
-
-async def delete_mail_attachment(tenant_id, user_id, message_id, attachment_id):
-    pass
-
-
+async def get_specific_eml(tenant_id, user_id, message_id):
+    user_mails = await get_user_mails_API(tenant_id, user_id)
+    for mail in user_mails:
+        if mail.get("message_id") == message_id:
+            tenant_service = TenantService(tenant_id)
+            hash_tid = tenant_service.getTenantHashed()
+            fs = data_service.get_gridfs(hash_tid)
+            cursor = fs.find({"filename": f"{message_id}.eml"})
+            for eml in cursor:
+                content = eml.read()
+                from fastapi.responses import Response
+                return Response(content, media_type="message/rfc822")
+    return None
 # change end
 
 
@@ -114,6 +138,9 @@ async def init_tenant(credentials: TenantCredentials = Body(...)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
+    except Exception as e:
+        logger.error(f"Error occurred in init_tenant: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.put("/update", response_model=SuccessResponse)
@@ -132,6 +159,23 @@ async def update_tenant(credentials: TenantCredentials = Body(...)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
+    except Exception as e:
+        logger.error(f"Error occurred in update: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.get("/{tenant_id}/mails")
+async def get_mails(tenant_id: str = Path(..., description="The ID of the tenant")):
+    """Retrieves the list of all users for a given tenant from local storage."""
+    try:
+        graph_client = await get_graph_client(tenant_id)
+        mails = await mail_service.getMail(graph_client, tenant_id)
+        return mails
+    except auth_service.TenantNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error occurred in get_mails: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/{tenant_id}/users")
@@ -142,6 +186,9 @@ async def get_users(tenant_id: str = Path(..., description="The ID of the tenant
         return users
     except auth_service.TenantNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error occurred in get_users: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/{tenant_id}/users/{user_id}")
@@ -155,6 +202,9 @@ async def get_user(
         return user
     except (auth_service.TenantNotFoundError, auth_service.UserNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error occurred in get_user: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/{tenant_id}/users/{user_id}/mails")
@@ -168,6 +218,9 @@ async def get_user_mails(
         return mails
     except (auth_service.TenantNotFoundError, auth_service.UserNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error occurred in get_user_mails: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/{tenant_id}/users/{user_id}/mails/{message_id}")
@@ -182,6 +235,26 @@ async def get_mail(
         return mail
     except (auth_service.TenantNotFoundError, auth_service.MailNotFoundError) as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error occurred in get_mail: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.get("/{tenant_id}/users/{user_id}/mails/{message_id}/eml")
+async def get_mail(
+    tenant_id: str = Path(..., description="The ID of the tenant"),
+    user_id: str = Path(..., description="The ID of the user (GUID)"),
+    message_id: str = Path(..., description="The ID of the email message to retrieve"),
+):
+    """Retrieves data for a single, specific email from local storage."""
+    try:
+        mail = await get_specific_eml(tenant_id, user_id, message_id)
+        return mail
+    except (auth_service.TenantNotFoundError, auth_service.MailNotFoundError) as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error occurred in get_mail: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.delete(
@@ -195,12 +268,17 @@ async def delete_mail(
 ):
     """Deletes a specific email for a user."""
     try:
-        await delete_user_mail(tenant_id, user_id, message_id)
+        # await delete_user_mail(tenant_id, user_id, message_id)
+        graph_client = await get_graph_client(tenant_id)
+        await mail_service.delMail(graph_client, tenant_id, user_id, message_id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except auth_service.TenantNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except auth_service.GraphAPIError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error occurred in delete_mail: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/{tenant_id}/users/{user_id}/mails/{message_id}/attachments")
@@ -222,6 +300,9 @@ async def get_attachments_list(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Could not retrieve attachments. Verify message ID and permissions. Error: {e}",
         )
+    except Exception as e:
+        logger.error(f"Error occurred in get_attachments_list: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get(
@@ -250,6 +331,9 @@ async def get_attachment(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
+    except Exception as e:
+        logger.error(f"Error occurred in get_attachment: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.delete(
@@ -264,17 +348,23 @@ async def delete_attachment(
 ):
     """Deletes a specific attachment from an email."""
     try:
+        graph_client = await get_graph_client(tenant_id)
         await attachment_service.delete_attachment(
+            graph_client,
             tenant_id,
             user_id=user_id,
             message_id=message_id,
             attachment_id=attachment_id,
+            request_to_m365=True,
         )
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except auth_service.TenantNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except auth_service.GraphAPIError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error occurred in delete_attachment: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.delete("/test/delete_database/{tenant_id}")
