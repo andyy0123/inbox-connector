@@ -108,8 +108,9 @@ async def getLatestMail(client: GraphServiceClient, tenant_id):
                 })
         return _response_success(changes)
 
-    except ClientAuthenticationError as e:
-        print(f"Authentication failed: {e.message}")
+    except Exception as e:
+        logger.log(LogLevel.ERROR, "getLatestMail", "Unexpected error", tenant=tenant_id, message_id=message_id, error=str(e))
+        return _response_error(f"Unexpected error: {str(e)}")
 
 async def delMail(client, tenant_id: str, user_id: str, message_id: str):
     logger.log(LogLevel.INFO, "DeleteMail", "Try to delete mail", tenant=tenant_id, user_id=user_id, message_id=message_id)
@@ -264,7 +265,8 @@ async def _process_mail(client, user_id, tenant_id, msg: dict):
                     "subject": subject,
                     "attachments": attachments,
                     "synced_at": synced_at,
-                    "change_type": "updated"
+                    "change_type": "updated",
+                    "is_deleted": False
                 },
                 "$push": {
                     "change_history": {
